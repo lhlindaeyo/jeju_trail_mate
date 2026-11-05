@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     # External data (all optional — features degrade gracefully when missing)
     kma_service_key: str | None = None  # 공공데이터포털 기상청 단기예보 serviceKey
-    tour_api_key: str | None = None  # 한국관광공사 TourAPI serviceKey
 
     # Storage
     storage_dir: str = "./storage"

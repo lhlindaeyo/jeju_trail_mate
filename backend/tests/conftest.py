@@ -8,7 +8,7 @@ os.environ.update({
     "LLM_PROVIDER": "mock",
     "ADMIN_TOKEN": "test-admin",
     "KMA_SERVICE_KEY": "",
-    "TOUR_API_KEY": "",
+    
     "APP_ENV": "test",
 })
 
@@ -49,8 +49,9 @@ def auth(client):
     return h
 
 
-def route_id(client, code: str) -> str:
-    return next(r["id"] for r in client.get("/v1/routes").json()["routes"] if r["official_code"] == code)
+def route_id(client, code: str, trail_type: str = "jeju_olle") -> str:
+    routes = client.get("/v1/routes", params={"trail_type": trail_type}).json()["routes"]
+    return next(r["id"] for r in routes if r["course_no"] == code)
 
 
 def make_trip(client, h, start="2026-11-10", end="2026-11-12") -> str:

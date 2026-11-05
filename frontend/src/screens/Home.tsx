@@ -1,113 +1,214 @@
-import { useEffect, useState } from "react";
-import { api, fmtDate, type Json } from "../api";
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import { api, gpsQueue } from "../api";
 import { useApp } from "../App";
 
-export function NewTripForm({ onCreated }: { onCreated?: () => void }) {
-  const { refreshTrips, setTripId } = useApp();
-  const [title, setTitle] = useState("나의 올레 여행");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [lodging, setLodging] = useState("");
-  const [err, setErr] = useState("");
-  const create = async () => {
-    setErr("");
-    try {
-      const t = await api("/v1/trips", { body: { title, start_date: start, end_date: end, lodging_note: lodging || null } });
-      await refreshTrips();
-      setTripId(t.id);
-      onCreated?.();
-    } catch (e) { setErr((e as Error).message); }
-  };
-  return (
-    <div className="card">
-      <h2>새 여행 만들기</h2>
-      <label className="field">여행 이름<input type="text" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
-      <div className="grid2">
-        <label className="field">시작일<input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
-        <label className="field">종료일<input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-      </div>
-      <label className="field">숙박 위치 메모(선택)<input type="text" value={lodging} onChange={(e) => setLodging(e.target.value)} placeholder="예: 서귀포 시내" /></label>
-      {err && <p className="err">{err}</p>}
-      <button className="btn" onClick={create} disabled={!start || !end}>만들기</button>
-    </div>
-  );
+const YELLOW = "#FFC83D";
+const JEJU: [number, number] = [33.38, 126.55];
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTR = "© OpenStreetMap contributors · 개발용 타일";
+
+function fmtKm(m: number | null | undefined) {
+  return m == null ? "—" : (m / 1000).toFixed(1);
+}
+
+/** Split a path at `doneM` metres: [done part, remaining part]. */
+function splitPath(path: [number, number][], doneM: number): [[number, number][], [number, number][]] {
+  if (!path.length || doneM <= 0) return [[], path];
+  let acc = 0;
+  for (let i = 1; i < path.length; i++) {
+    const seg = L.latLng(path[i - 1]).distanceTo(L.latLng(path[i]));
+    if (acc + seg >= doneM) {
+      const t = (doneM - acc) / seg;
+      const mid: [number, number] = [path[i - 1][0] + (path[i][0] - path[i - 1][0]) * t, path[i - 1][1] + (path[i][1] - path[i - 1][1]) * t];
+      return [[...path.slice(0, i), mid], [mid, ...path.slice(i)]];
+    }
+    acc += seg;
+  }
+  return [path, []];
 }
 
 export default function Home() {
-  const { trip, trips, setTripId, session, go } = useApp();
-  const [today, setToday] = useState<Json | null>(null);
-  const [err, setErr] = useState("");
-  const [creating, setCreating] = useState(false);
+  const { course, session, setSession, trip, me, refreshMe, pos, locOn, setLocOn, locMsg, openSheet, toast, pushNotifications, flushGps, go, refreshCourse } = useApp();
+  const mapEl = useRef<HTMLDivElement>(null);
+  const miniEl = useRef<HTMLDivElement>(null);
+  const map = useRef<L.Map | null>(null);
+  const mini = useRef<L.Map | null>(null);
+  const layer = useRef<L.LayerGroup | null>(null);
+  const meMarker = useRef<{ big?: L.Marker; small?: L.Marker }>({});
+  const [spin, setSpin] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const active = session && session.status !== "ended" && session.route_id === course?.id;
+  const doneM = active && session.done_km != null ? session.done_km * 1000 : 0;
+  const totalM = course?.distance_km != null ? course.distance_km * 1000 : null;
+  const leftM = totalM != null ? Math.max(totalM - doneM, 0) : null;
+  const nextWp = active ? session.next_waypoint : null;
+
+  // ---- maps ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!mapEl.current || map.current) return;
+    const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(JEJU, 10);
+    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(m);
+    layer.current = L.layerGroup().addTo(m);
+    map.current = m;
+    if (miniEl.current) {
+      const mm = L.map(miniEl.current, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+        doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false }).setView(JEJU, 16);
+      L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(mm);
+      mini.current = mm;
+    }
+    return () => { m.remove(); mini.current?.remove(); map.current = null; mini.current = null; meMarker.current = {}; };
+  }, []);
+
+  // route: done = yellow solid, remaining = white dashed, S/F yellow dots, waypoints white
+  useEffect(() => {
+    const m = map.current, g = layer.current;
+    if (!m || !g) return;
+    g.clearLayers();
+    if (!course) return;
+    const path: [number, number][] = course.path ?? [];
+    if (path.length > 1) {
+      const [done, rest] = splitPath(path, doneM);
+      L.polyline(path, { color: "#10312a", opacity: .5, weight: 9, lineCap: "round" }).addTo(g);
+      L.polyline(rest, { color: "#fff", weight: 4, dashArray: "1 8", lineCap: "round" }).addTo(g);
+      if (done.length > 1) L.polyline(done, { color: YELLOW, weight: 5, lineCap: "round" }).addTo(g);
+    }
+    const visited = new Set<string>(active ? session.visited_waypoints : []);
+    for (const w of course.waypoints ?? []) {
+      if (!w.location) continue;
+      const end = w.kind !== "W";
+      L.circleMarker(w.location, { radius: end ? 6 : 4, color: "#10312a", weight: end ? 2 : 1.5,
+        fillColor: end || visited.has(w.name) ? YELLOW : "#fff", fillOpacity: 1 })
+        .bindTooltip(`${w.code} ${w.name}`).addTo(g);
+    }
+    if (path.length > 1) m.fitBounds(L.latLngBounds(path).pad(0.25), { paddingTopLeft: [140, 120], paddingBottomRight: [20, 170] });
+    else if (course.start) m.setView(course.start, 13);
+  }, [course, doneM, active, session?.visited_waypoints]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // my position (outside Jeju → shown at the course start or island centre, labelled as an example)
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    if (!pos) {
+      meMarker.current.big?.remove(); meMarker.current.small?.remove(); meMarker.current = {};
+      return;
+    }
+    const ll: [number, number] = pos.onIsland ? [pos.lat, pos.lon] : (course?.path?.[0] ?? course?.start ?? JEJU);
+    const icon = L.divIcon({ className: "", html: '<div class="me-marker"><i></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+    if (!meMarker.current.big) {
+      meMarker.current.big = L.marker(ll, { icon, keyboard: false, interactive: false }).addTo(m);
+      if (mini.current) meMarker.current.small = L.marker(ll, { icon, interactive: false }).addTo(mini.current);
+      m.setView(ll, Math.max(m.getZoom(), 15));
+    } else {
+      meMarker.current.big.setLatLng(ll);
+      meMarker.current.small?.setLatLng(ll);
+    }
+    mini.current?.setView(ll, 17, { animate: false });
+  }, [pos, course]);
 
   useEffect(() => {
-    if (!trip) return;
-    api(`/v1/trips/${trip.id}/today`).then(setToday).catch((e) => setErr(e.message));
-  }, [trip]);
+    if (!pos && mini.current) {
+      const c = nextWp?.location ?? course?.path?.[0] ?? course?.start;
+      if (c) mini.current.setView(c, 16, { animate: false });
+    }
+  }, [pos, course, nextWp]);
 
-  if (!trip || creating) return <NewTripForm onCreated={() => setCreating(false)} />;
+  // ---- session controls -----------------------------------------------------------------
+  const start = async () => {
+    if (!trip) { openSheet("plan"); toast("먼저 여행을 만들어 주세요"); return; }
+    if (!course) { go("explore"); toast("걸을 코스를 먼저 골라 주세요"); return; }
+    setBusy(true);
+    try {
+      if (!me.consents.location) {
+        if (!confirm("걷는 동안 위치를 기록해 진행률·경유지 도착을 계산해요. 세션을 끝내면 기록을 멈춥니다. 위치 기록에 동의할까요?")) {
+          const r = await api("/v1/sessions", { body: { trip_id: trip.id, route_id: course.id, tracking_mode: "manual" } });
+          setSession(r); pushNotifications(r.notifications); toast("위치 없이 기록을 시작했어요");
+          return;
+        }
+        await api("/v1/me/preferences", { method: "PATCH", body: { consent_location: true } });
+        await refreshMe();
+      }
+      const r = await api("/v1/sessions", { body: { trip_id: trip.id, route_id: course.id } });
+      setSession(r); pushNotifications(r.notifications);
+      if (!locOn) setLocOn(true);
+      toast("걷기 기록을 시작했어요");
+    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+  };
+  const control = async (action: "pause" | "resume" | "end") => {
+    if (action === "end" && !confirm("오늘 걷기를 마칠까요?")) return;
+    if (action !== "resume") await flushGps();
+    try {
+      const r = await api(`/v1/sessions/${session!.session_id}/${action}`, { method: "POST" });
+      setSession(r); pushNotifications(r.notifications);
+      if (action === "end") { gpsQueue.clear(); toast("수고했어요! 오늘의 일기를 남겨 보세요"); }
+    } catch (e) { toast((e as Error).message); }
+  };
+  const refresh = async () => {
+    setSpin(true); setTimeout(() => setSpin(false), 650);
+    await flushGps();
+    if (session) { try { setSession((await api(`/v1/sessions/${session.session_id}`))); } catch { /* ignore */ } }
+    await refreshCourse();
+  };
 
-  const sched = today?.schedule;
-  const notices = today?.notices;
+  const isHy = course?.trail_type === "hayoung_olle";
+  const region = !course ? "코스탐색에서 걸을 길을 골라 주세요"
+    : isHy ? "서귀포시 · 서귀포시청 순환" : `${course.start_point} → ${course.end_point}`;
+  const visitedCount = active ? session.visited_waypoints.filter((n: string) => n !== "서귀포시청제1청사").length : 0;
+
   return (
-    <div>
-      {trips.length > 1 && (
-        <select value={trip.id} onChange={(e) => setTripId(e.target.value)} aria-label="여행 선택">
-          {trips.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
-      )}
-      <h1>오늘의 브리핑</h1>
-      {err && <p className="err">{err}</p>}
-      {session && session.status !== "ended" && (
-        <div className="banner">
-          <strong>트레킹 진행 중</strong> · {session.route ?? "코스 미지정"} · {session.walked_km}km
-          <div style={{ marginTop: 8 }}><button className="btn" onClick={() => go("walk")}>지도 보기</button></div>
+    <section aria-label="홈">
+      <div id="map" ref={mapEl} role="region" aria-label="코스 지도" />
+      <div className="vignette" />
+      <div className="topfade" />
+      <header className="top">
+        <div>
+          <h1>{course ? course.name : "JEJU TRAIL MATE"}
+            {course && <span className={`badge typebadge ${isHy ? "yellow" : ""}`}>{course.trail_label}</span>}</h1>
+          <p>{region}</p>
         </div>
-      )}
-      <div className="card">
-        <div className="spread"><h2>{today ? fmtDate(today.date) : "오늘"}</h2><span className="muted small">일몰 {today?.sunset ?? "–"}</span></div>
-        {sched?.route ? (
-          <div className="stack">
-            <div className="metric">{sched.route.name}</div>
-            <div>{sched.route.start_point} → {sched.route.end_point}</div>
-            <div className="row">
-              <span className="tag">{sched.route.distance_km}km</span>
-              <span className="tag">난이도 {sched.route.difficulty}</span>
-              <span className="tag">{sched.planned_start}–{sched.planned_end}</span>
-            </div>
-            {today?.estimate && <div className="muted small">예상 소요 약 {Math.round(today!.estimate.duration_min / 6) / 10}시간 ({today!.estimate.assumptions})</div>}
-            {today?.route?.freshness?.data_status !== "verified" && <span className="tag warn">코스 정보 최신 확인 필요</span>}
-          </div>
-        ) : sched ? <p>{sched.note ?? "오늘은 걷는 일정이 없어요."}</p> : (
-          <p className="muted">오늘 승인된 일정이 없습니다. <button className="btn ghost" onClick={() => go("plan")}>일정 만들기</button></p>
-        )}
-      </div>
+        <button className="menu" aria-label="메뉴" onClick={() => openSheet("menu")}><i /></button>
+      </header>
+      <button className={`locate ${locOn ? "on" : ""}`} type="button" onClick={() => setLocOn(!locOn)} aria-pressed={locOn}>
+        <b /><span>{locOn ? locMsg || "위치 확인 중" : "내 위치 켜기"}</span>
+      </button>
 
-      {notices && (
-        <div className={`banner ${notices.notices.length ? "safety" : "warn"}`}>
-          <strong>공식 공지</strong>{" "}
-          {notices.notices.length ? `${notices.notices.length}건` : "등록된 공지 없음"}
-          {notices.notices.map((n: Json) => <div key={n.id}>· <a href={n.source_url} target="_blank" rel="noopener">{n.title}</a></div>)}
-          {notices.caveat && <div className="small">{notices.caveat}</div>}
-          <div className="small"><a href={notices.official_url} target="_blank" rel="noopener">제주올레 공식 사이트에서 확인</a></div>
-        </div>
+      <div className="mini" aria-hidden="true"><div ref={miniEl} /></div>
+      <div className="stat">
+        <div className="n">{nextWp?.distance_m != null ? (nextWp.distance_m / 1000).toFixed(1) : "—"}<small>km</small></div>
+        <div className="l">{nextWp ? `다음 포인트 · ${nextWp.name}` : "다음 포인트까지"}</div>
+        <div className="n">{fmtKm(leftM)}<small>km</small></div>
+        <div className="l">목적지까지</div>
+        <button className={`refresh ${spin ? "spin" : ""}`} type="button" onClick={refresh}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>새로고침
+        </button>
+      </div>
+      {course && !course.has_geometry && (
+        <div className="maphint">{isHy ? "하영올레 경로 데이터(SHP) 적재 전이라 지도에 길을 그리지 않았어요." : "제주올레 공식 코스는 경로 좌표가 없어 거리 기록만 해요. 길은 현장 리본·간세 표식을 따라 주세요."}</div>
       )}
 
-      {sched?.checklist?.length > 0 && (
-        <div className="card">
-          <h2>출발 전 확인</h2>
-          <ul>{sched.checklist.map((c: string) => <li key={c}>{c}</li>)}</ul>
-          <p className="muted small">날씨는 동행자에게 물어보면 기상청 예보를 출처·발표 시각과 함께 알려드려요.</p>
-        </div>
-      )}
+      <div className="chip2"><div className="n">{course?.course_no ?? "—"}</div><div className="l">코스</div>
+        <div className="n">{course?.waypoints?.length ? visitedCount : "—"}</div><div className="l">포인트</div></div>
 
-      <div className="btn-row">
-        <button className="btn big" onClick={() => go("walk")}>트레킹 시작</button>
-        <button className="btn big secondary" onClick={() => go("ai")}>AI에게 질문</button>
+      <div className="ctrl">
+        {!active && <button className="primary" onClick={start} disabled={busy}>걷기 시작</button>}
+        {active && session.status === "active" && <button onClick={() => control("pause")}>일시정지</button>}
+        {active && session.status === "paused" && <button className="primary" onClick={() => control("resume")}>다시 걷기</button>}
+        {active && <button className="dark" onClick={() => control("end")}>종료</button>}
       </div>
-      <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn ghost" onClick={() => go("journal")}>오늘 기록하기</button>
-        <button className="btn ghost" onClick={() => setCreating(true)}>새 여행</button>
+
+      <div className="summary">
+        <div className={`avatar ${active ? "rec" : ""}`} aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="#fff" /><path d="M4 21a8 7 0 0 1 16 0z" fill="#fff" /></svg>
+        </div>
+        <div className="name">
+          <b>{course?.name ?? "코스 미선택"}</b>
+          <span>{active ? (session.tracking_mode === "manual" ? "수동 기록 중" : `기록 중 · GPS ${session.gps_quality === "poor" ? "약함" : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : "확인 중"}`)
+            : totalM != null ? `전체 ${course!.distance_km.toFixed(1)} km` : course ? "거리 계산 예정" : "—"}</span>
+        </div>
+        <div className="kv"><b>{active ? fmtKm(doneM) : "0.0"}</b><span>진행 km</span></div>
+        <div className="kv"><b>{fmtKm(leftM)}</b><span>남은 km</span></div>
       </div>
-    </div>
+    </section>
   );
 }

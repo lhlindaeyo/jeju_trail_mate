@@ -8,6 +8,8 @@ httpx==0.28.1
 Jinja2==3.1.6
 anthropic==2.5.0
 python-multipart==0.0.33
+pyshp==3.1.6
+pyproj==3.8.0
 # optional
 # psycopg[binary]   # PostgreSQL
 # weasyprint        # server-side PDF (needs Pango/GTK system libraries)

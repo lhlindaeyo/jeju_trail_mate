@@ -4,8 +4,8 @@
   "description": "제주올레길 개인 AI 트레킹 동행자",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7f6f1",
-  "theme_color": "#315d49",
+  "background_color": "#F3F6F5",
+  "theme_color": "#0F1115",
   "lang": "ko",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

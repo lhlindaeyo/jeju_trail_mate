@@ -117,7 +117,6 @@ export default function Settings() {
 
   return (
     <div>
-      <h1>설정</h1>
       <p className="muted small">AI: {me.ai_provider === "mock" ? "오프라인 모드(도구 조회만)" : me.ai_provider} · {me.email}</p>
       <PrefsForm onSaved={refreshMe} />
       <div className="card stack">

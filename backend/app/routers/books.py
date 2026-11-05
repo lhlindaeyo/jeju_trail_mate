@@ -36,9 +36,17 @@ class BookIn(BaseModel):
     excluded_entry_ids: list[str] = Field(default_factory=list)
 
 
+@router.get("/trips/{trip_id}/book/eligibility")
+def book_eligibility(trip_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return book_service.eligibility(db, owned_trip(db, user, trip_id))
+
+
 @router.post("/trips/{trip_id}/book", status_code=201)
 def create_book(trip_id: str, body: BookIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     trip = owned_trip(db, user, trip_id)
+    elig = book_service.eligibility(db, trip)
+    if not elig["eligible"]:
+        raise HTTPException(409, " ".join(elig["reasons"]))
     if body.theme not in book_service.THEMES:
         raise HTTPException(422, "unknown theme")
     b = JourneyBook(trip_id=trip.id, **body.model_dump())

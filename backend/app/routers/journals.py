@@ -142,3 +142,39 @@ def delete_media(media_id: str, user: User = Depends(current_user), db: Session 
     storage.delete(m.storage_key)
     db.delete(m)
     db.commit()
+
+
+# --- v1.2 diary: one photo + up to three lines ------------------------------------------
+@router.post("/diary", status_code=201)
+async def create_diary(trip_id: str = Form(...), text: str = Form(...), photo: UploadFile = File(...),
+                       date: Date | None = Form(default=None), waypoint_id: str | None = Form(default=None),
+                       user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Atomic diary entry: the photo is required and the text is limited to three lines."""
+    from ..models import RouteWaypoint
+
+    trip = owned_trip(db, user, trip_id)
+    try:
+        body = journal_service.validate_diary_text(text)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    ctype = (photo.content_type or "").split(";")[0].strip()
+    if ctype not in ALLOWED_TYPES or ALLOWED_TYPES[ctype][0] != "photo":
+        raise HTTPException(415, "사진 파일(JPEG/PNG/WebP/HEIC)만 올릴 수 있어요.")
+    if not user.preferences.consent_photos:
+        raise HTTPException(403, "사진 저장 동의가 필요합니다.")
+    if waypoint_id and not db.get(RouteWaypoint, waypoint_id):
+        raise HTTPException(422, "unknown waypoint")
+    limit = get_settings().max_upload_mb * 1024 * 1024
+    data = await photo.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(413, "파일이 너무 큽니다.")
+    if not data:
+        raise HTTPException(422, "사진 한 장을 먼저 골라 주세요.")
+    e = JournalEntry(trip_id=trip.id, date=date or now_kst().date(), kind="memo", text=body, status="saved",
+                     waypoint_id=waypoint_id)
+    db.add(e)
+    db.flush()
+    db.add(MediaAsset(entry_id=e.id, storage_key=storage.put(user.id, data, ctype), media_type="photo", content_type=ctype))
+    db.commit()
+    db.refresh(e)
+    return _dict(e)

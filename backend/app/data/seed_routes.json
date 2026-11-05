@@ -1,23 +1,658 @@
 {
-  "_comment": "개발용 초기 데이터셋. 모든 값은 기억/공개 자료 기반의 '미검증' 값이며 좌표는 근사치입니다. 실제 운영 전 관리자가 제주올레 공식 사이트(https://www.jejuolle.org/trail)와 대조해 verification_status=verified, checked_at 을 갱신해야 합니다. GPX/경로 좌표는 사용 허가 확보 전까지 포함하지 않습니다.",
-  "routes": [
-    {"official_code": "1", "name": "제주올레 1코스", "start_point": "시흥초등학교", "end_point": "광치기해변",
-     "start_lat": 33.4785, "start_lon": 126.8960, "end_lat": 33.4524, "end_lon": 126.9236,
-     "distance_km": 15.1, "difficulty": "중", "estimated_duration_min": 270, "tags": ["바다", "오름", "일출"]},
-    {"official_code": "6", "name": "제주올레 6코스", "start_point": "쇠소깍다리", "end_point": "제주올레 여행자센터",
-     "start_lat": 33.2526, "start_lon": 126.6237, "end_lat": 33.2480, "end_lon": 126.5640,
-     "distance_km": 11.0, "difficulty": "하", "estimated_duration_min": 210, "tags": ["바다", "카페", "도심"]},
-    {"official_code": "7", "name": "제주올레 7코스", "start_point": "제주올레 여행자센터", "end_point": "월평 아왜낭목",
-     "start_lat": 33.2480, "start_lon": 126.5640, "end_lat": 33.2547, "end_lon": 126.4510,
-     "distance_km": 17.6, "difficulty": "중", "estimated_duration_min": 330, "tags": ["바다", "해안절벽", "풍경"]},
-    {"official_code": "10", "name": "제주올레 10코스", "start_point": "화순금모래해변", "end_point": "하모체육공원",
-     "start_lat": 33.2380, "start_lon": 126.3350, "end_lat": 33.2160, "end_lon": 126.2530,
-     "distance_km": 15.6, "difficulty": "중", "estimated_duration_min": 330, "tags": ["바다", "산방산", "문화"]},
-    {"official_code": "14", "name": "제주올레 14코스", "start_point": "저지마을", "end_point": "한림항",
-     "start_lat": 33.3326, "start_lon": 126.2633, "end_lat": 33.4130, "end_lon": 126.2610,
-     "distance_km": 19.1, "difficulty": "중", "estimated_duration_min": 390, "tags": ["숲", "바다", "마을"]},
-    {"official_code": "17", "name": "제주올레 17코스", "start_point": "광령1리사무소", "end_point": "관덕정",
-     "start_lat": 33.4640, "start_lon": 126.4300, "end_lat": 33.5130, "end_lon": 126.5220,
-     "distance_km": 18.1, "difficulty": "중", "estimated_duration_min": 360, "tags": ["바다", "도심", "문화"]}
-  ]
+ "_comment": "개발용 시드. 모든 값은 출처 레지스트리(data_sources)와 연결되며 원본 import 시 교체됩니다. 좌표가 확인되지 않은 값은 넣지 않습니다.",
+ "data_sources": [
+  {
+   "id": "olle_course_status",
+   "name": "[관광, 여행] 제주특별자치도_올레코스현황",
+   "provider": "제주특별자치도 (공공데이터포털 15043496, 제주데이터허브 LINK)",
+   "platform_url": "https://www.data.go.kr/data/15043496/fileData.do",
+   "ref_date": "2020-01-14",
+   "license": "확인 필요",
+   "note": "시드 값은 UI 프로토타입 표에서 옮긴 것. 원본 CSV를 data/raw/olle_course_status/에 두고 import 하면 교체됨. 경로 좌표 없음."
+  },
+  {
+   "id": "hayoung_shp",
+   "name": "[관광, 여행] 서귀포시 하영올레 전체 코스(1, 2, 3코스) SHP파일",
+   "provider": "서귀포시 (제주데이터허브)",
+   "platform_url": "https://www.jejudatahub.net/",
+   "ref_date": "2023-10",
+   "license": "확인 필요",
+   "note": "시드에는 경유지 이름·순서만 있음(좌표 없음). SHP 6개 파일을 data/raw/hayoung_olle/에 두고 import 하면 경로·좌표가 적재됨. 경유지 코드 규칙(S/F/순번)은 추정."
+  },
+  {
+   "id": "seogwipo_food",
+   "name": "제주특별자치도 서귀포시_휴게음식점현황",
+   "provider": "서귀포시 (공공데이터포털 15055973)",
+   "platform_url": "https://www.data.go.kr/data/15055973/fileData.do",
+   "ref_date": null,
+   "license": "확인 필요",
+   "note": "미적재. data/raw/poi/에 CSV를 두고 import."
+  },
+  {
+   "id": "kma_vilage_fcst",
+   "name": "기상청_단기예보 조회서비스",
+   "provider": "기상청 (공공데이터포털)",
+   "platform_url": "https://www.data.go.kr/",
+   "ref_date": "실시간",
+   "license": "공공누리 (포털 표기 확인)",
+   "note": "API 키 설정 시 실시간 조회."
+  },
+  {
+   "id": "jejuolle_official",
+   "name": "제주올레 공식 사이트 — 코스 변경·우회 공지",
+   "provider": "사단법인 제주올레",
+   "platform_url": "https://www.jejuolle.org/trail#/",
+   "ref_date": "수시",
+   "license": "링크·확인용(재배포 아님)",
+   "note": "공지는 관리자가 확인 후 수동 등록."
+  }
+ ],
+ "routes": [
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "1",
+   "name": "제주올레 1코스",
+   "subtitle": "시흥 - 광치기",
+   "start_point": "시흥초등학교",
+   "end_point": "광치기 해변",
+   "distance_km": 15.1,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "2",
+   "name": "제주올레 2코스",
+   "subtitle": "광치기 - 온평",
+   "start_point": "광치기 해변",
+   "end_point": "온평포구",
+   "distance_km": 14.5,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "3-A",
+   "name": "제주올레 3-A코스",
+   "subtitle": "온평 - 표선(A)",
+   "start_point": "온평포구",
+   "end_point": "표선 해비치 해변",
+   "distance_km": 19.9,
+   "duration_min_low": 360,
+   "duration_min_high": 420,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "3-B",
+   "name": "제주올레 3-B코스",
+   "subtitle": "온평 - 표선(B)",
+   "start_point": "온평포구",
+   "end_point": "표선 해비치 해변",
+   "distance_km": 13.7,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "4",
+   "name": "제주올레 4코스",
+   "subtitle": "표선 - 남원",
+   "start_point": "표선 해비치 해변",
+   "end_point": "남원포구",
+   "distance_km": 23.6,
+   "duration_min_low": 360,
+   "duration_min_high": 420,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "5",
+   "name": "제주올레 5코스",
+   "subtitle": "남원 - 쇠소깍",
+   "start_point": "남원포구",
+   "end_point": "쇠소깍다리",
+   "distance_km": 13.1,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "6",
+   "name": "제주올레 6코스",
+   "subtitle": "쇠소깍 - 서귀포",
+   "start_point": "쇠소깍다리",
+   "end_point": "제주올레여행자센터",
+   "distance_km": 11,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "7",
+   "name": "제주올레 7코스",
+   "subtitle": "서귀포 - 월평",
+   "start_point": "제주올레여행자센터",
+   "end_point": "월평 아왜낭목",
+   "distance_km": 17.7,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "8",
+   "name": "제주올레 8코스",
+   "subtitle": "월평 - 대평",
+   "start_point": "월평 아왜낭목",
+   "end_point": "대평포구",
+   "distance_km": 19.2,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "9",
+   "name": "제주올레 9코스",
+   "subtitle": "대평 - 화순",
+   "start_point": "대평포구",
+   "end_point": "화순 제주올레안내소",
+   "distance_km": 7.5,
+   "duration_min_low": 180,
+   "duration_min_high": 240,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "10",
+   "name": "제주올레 10코스",
+   "subtitle": "화순 - 모슬포",
+   "start_point": "화순금모래해변",
+   "end_point": "모슬포항 하모체육공원",
+   "distance_km": 17.3,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "11",
+   "name": "제주올레 11코스",
+   "subtitle": "모슬포 - 무릉",
+   "start_point": "하모체육공원",
+   "end_point": "제주자연생태문화체험골",
+   "distance_km": 17.8,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "12",
+   "name": "제주올레 12코스",
+   "subtitle": "무릉 - 용수",
+   "start_point": "제주자연생태문화체험골",
+   "end_point": "용수포구",
+   "distance_km": 17.1,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "13",
+   "name": "제주올레 13코스",
+   "subtitle": "용수 - 저지",
+   "start_point": "용수포구",
+   "end_point": "저지예술정보화마을",
+   "distance_km": 14.8,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "14",
+   "name": "제주올레 14코스",
+   "subtitle": "저지 - 한림",
+   "start_point": "저지예술정보화마을",
+   "end_point": "한림항 비양도 도항선 선착장",
+   "distance_km": 18.9,
+   "duration_min_low": 360,
+   "duration_min_high": 420,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "15",
+   "name": "제주올레 15코스",
+   "subtitle": "한림 - 고내",
+   "start_point": "한림항",
+   "end_point": "고내포구",
+   "distance_km": 16.7,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "16",
+   "name": "제주올레 16코스",
+   "subtitle": "고내 - 광령",
+   "start_point": "고내포구",
+   "end_point": "광령1리사무소",
+   "distance_km": 15.7,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "17",
+   "name": "제주올레 17코스",
+   "subtitle": "광령 - 제주시 원도심",
+   "start_point": "광령1리사무소",
+   "end_point": "간세라운지",
+   "distance_km": 17.9,
+   "duration_min_low": 360,
+   "duration_min_high": 420,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "18",
+   "name": "제주올레 18코스",
+   "subtitle": "제주시 원도심 - 조천",
+   "start_point": "간세라운지",
+   "end_point": "조천만세동산",
+   "distance_km": 19,
+   "duration_min_low": 360,
+   "duration_min_high": 420,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "19",
+   "name": "제주올레 19코스",
+   "subtitle": "조천 - 김녕",
+   "start_point": "조천만세동산",
+   "end_point": "김녕 서포구",
+   "distance_km": 19.1,
+   "duration_min_low": 360,
+   "duration_min_high": 480,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "20",
+   "name": "제주올레 20코스",
+   "subtitle": "김녕 - 하도",
+   "start_point": "김녕 서포구",
+   "end_point": "제주해녀박물관",
+   "distance_km": 17.3,
+   "duration_min_low": 300,
+   "duration_min_high": 360,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "21",
+   "name": "제주올레 21코스",
+   "subtitle": "하도 - 종달",
+   "start_point": "제주해녀박물관",
+   "end_point": "종달바당",
+   "distance_km": 11.1,
+   "duration_min_low": 180,
+   "duration_min_high": 240,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "1-1",
+   "name": "제주올레 1-1코스",
+   "subtitle": "우도",
+   "start_point": "천진항",
+   "end_point": "하우목동항",
+   "distance_km": 11.5,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "7-1",
+   "name": "제주올레 7-1코스",
+   "subtitle": "월드컵경기장 - 제주올레여행자센터",
+   "start_point": "월드컵경기장 입구",
+   "end_point": "제주올레여행자센터",
+   "distance_km": 15,
+   "duration_min_low": 240,
+   "duration_min_high": 300,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "10-1",
+   "name": "제주올레 10-1코스",
+   "subtitle": "가파도",
+   "start_point": "가파도 상동포구",
+   "end_point": "하동포구",
+   "distance_km": 4.3,
+   "duration_min_low": 60,
+   "duration_min_high": 120,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "14-1",
+   "name": "제주올레 14-1코스",
+   "subtitle": "저지 - 무릉",
+   "start_point": "저지예술정보화마을",
+   "end_point": "오설록녹차밭",
+   "distance_km": 9.6,
+   "duration_min_low": 180,
+   "duration_min_high": 240,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "jeju_olle",
+   "operator": "사단법인 제주올레",
+   "course_no": "18-1",
+   "name": "제주올레 18-1코스",
+   "subtitle": "추자도",
+   "start_point": "상추자항",
+   "end_point": "신양항",
+   "distance_km": 18.2,
+   "duration_min_low": 360,
+   "duration_min_high": 480,
+   "source_id": "olle_course_status"
+  },
+  {
+   "trail_type": "hayoung_olle",
+   "operator": "서귀포시",
+   "course_no": "1",
+   "name": "하영올레 1코스",
+   "subtitle": "서귀포시청 순환",
+   "start_point": "서귀포시청제1청사",
+   "end_point": "서귀포시청제1청사",
+   "distance_km": null,
+   "duration_min_low": null,
+   "duration_min_high": null,
+   "source_id": "hayoung_shp",
+   "waypoints": [
+    {
+     "seq": 0,
+     "code": "1S",
+     "name": "서귀포시청제1청사",
+     "kind": "S"
+    },
+    {
+     "seq": 1,
+     "code": "11",
+     "name": "법장사골목길",
+     "kind": "W"
+    },
+    {
+     "seq": 2,
+     "code": "12",
+     "name": "걸매생태공원",
+     "kind": "W"
+    },
+    {
+     "seq": 3,
+     "code": "13",
+     "name": "천지연폭포",
+     "kind": "W"
+    },
+    {
+     "seq": 4,
+     "code": "14",
+     "name": "서귀포칠십리시공원",
+     "kind": "W"
+    },
+    {
+     "seq": 5,
+     "code": "15",
+     "name": "새연교",
+     "kind": "W"
+    },
+    {
+     "seq": 6,
+     "code": "16",
+     "name": "새섬",
+     "kind": "W"
+    },
+    {
+     "seq": 7,
+     "code": "17",
+     "name": "천지연기정길",
+     "kind": "W"
+    },
+    {
+     "seq": 8,
+     "code": "18",
+     "name": "제주올레여행자센터",
+     "kind": "W"
+    },
+    {
+     "seq": 9,
+     "code": "19",
+     "name": "아랑조을거리",
+     "kind": "W"
+    },
+    {
+     "seq": 10,
+     "code": "1F",
+     "name": "서귀포시청제1청사",
+     "kind": "F"
+    }
+   ]
+  },
+  {
+   "trail_type": "hayoung_olle",
+   "operator": "서귀포시",
+   "course_no": "2",
+   "name": "하영올레 2코스",
+   "subtitle": "서귀포시청 순환",
+   "start_point": "서귀포시청제1청사",
+   "end_point": "서귀포시청제1청사",
+   "distance_km": null,
+   "duration_min_low": null,
+   "duration_min_high": null,
+   "source_id": "hayoung_shp",
+   "waypoints": [
+    {
+     "seq": 0,
+     "code": "2S",
+     "name": "서귀포시청제1청사",
+     "kind": "S"
+    },
+    {
+     "seq": 1,
+     "code": "21",
+     "name": "아시아CGI애니메이션센터",
+     "kind": "W"
+    },
+    {
+     "seq": 2,
+     "code": "22",
+     "name": "태평근린공원",
+     "kind": "W"
+    },
+    {
+     "seq": 3,
+     "code": "23",
+     "name": "무량정사",
+     "kind": "W"
+    },
+    {
+     "seq": 4,
+     "code": "24",
+     "name": "정모시쉼터",
+     "kind": "W"
+    },
+    {
+     "seq": 5,
+     "code": "25",
+     "name": "서복불로초공원",
+     "kind": "W"
+    },
+    {
+     "seq": 6,
+     "code": "26",
+     "name": "서복전시관",
+     "kind": "W"
+    },
+    {
+     "seq": 7,
+     "code": "27",
+     "name": "소남머리",
+     "kind": "W"
+    },
+    {
+     "seq": 8,
+     "code": "28",
+     "name": "자구리해안",
+     "kind": "W"
+    },
+    {
+     "seq": 9,
+     "code": "29",
+     "name": "서귀포항",
+     "kind": "W"
+    },
+    {
+     "seq": 10,
+     "code": "210",
+     "name": "서귀진성",
+     "kind": "W"
+    },
+    {
+     "seq": 11,
+     "code": "211",
+     "name": "이중섭미술관",
+     "kind": "W"
+    },
+    {
+     "seq": 12,
+     "code": "212",
+     "name": "이중섭거리",
+     "kind": "W"
+    },
+    {
+     "seq": 13,
+     "code": "213",
+     "name": "매일올레시장",
+     "kind": "W"
+    },
+    {
+     "seq": 14,
+     "code": "2F",
+     "name": "서귀포시청제1청사",
+     "kind": "F"
+    }
+   ]
+  },
+  {
+   "trail_type": "hayoung_olle",
+   "operator": "서귀포시",
+   "course_no": "3",
+   "name": "하영올레 3코스",
+   "subtitle": "서귀포시청 순환",
+   "start_point": "서귀포시청제1청사",
+   "end_point": "서귀포시청제1청사",
+   "distance_km": null,
+   "duration_min_low": null,
+   "duration_min_high": null,
+   "source_id": "hayoung_shp",
+   "waypoints": [
+    {
+     "seq": 0,
+     "code": "3S",
+     "name": "서귀포시청제1청사",
+     "kind": "S"
+    },
+    {
+     "seq": 1,
+     "code": "31",
+     "name": "솜반천탐방로",
+     "kind": "W"
+    },
+    {
+     "seq": 2,
+     "code": "32",
+     "name": "흙담소나무길",
+     "kind": "W"
+    },
+    {
+     "seq": 3,
+     "code": "33",
+     "name": "변시지그림정원",
+     "kind": "W"
+    },
+    {
+     "seq": 4,
+     "code": "34",
+     "name": "지장샘",
+     "kind": "W"
+    },
+    {
+     "seq": 5,
+     "code": "35",
+     "name": "면형의집",
+     "kind": "W"
+    },
+    {
+     "seq": 6,
+     "code": "36",
+     "name": "산지물물놀이장",
+     "kind": "W"
+    },
+    {
+     "seq": 7,
+     "code": "37",
+     "name": "동홍천힐링길",
+     "kind": "W"
+    },
+    {
+     "seq": 8,
+     "code": "3F",
+     "name": "서귀포시청제1청사",
+     "kind": "F"
+    }
+   ]
+  }
+ ]
 }

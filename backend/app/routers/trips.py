@@ -99,24 +99,26 @@ def today(trip_id: str, user: User = Depends(current_user), db: Session = Depend
     out = {"date": d.isoformat(), "sunset": sunset_kst(d).strftime("%H:%M"),
            "schedule": schedule_service.schedule_to_dict(sched) if sched else None}
     if sched and sched.route:
-        out["route"] = route_to_dict(sched.route)
+        out["route"] = route_to_dict(sched.route, with_path=True)
         out["notices"] = notices_payload(db, sched.route)
-        out["estimate"] = {
-            "duration_min": schedule_service.estimate_duration_min(sched.route.distance_km, user.preferences.pace_kmh, user.preferences.rest_every_minutes),
-            "assumptions": f"평균 {user.preferences.pace_kmh}km/h, 휴식 포함",
-        }
+        if sched.route.distance_km:
+            out["estimate"] = {
+                "duration_min": schedule_service.estimate_duration_min(sched.route.distance_km, user.preferences.pace_kmh, user.preferences.rest_every_minutes),
+                "assumptions": f"평균 {user.preferences.pace_kmh}km/h, 휴식 포함",
+            }
     return out
 
 
 class PlanIn(BaseModel):
-    route_ids: list[str] | None = Field(default=None, max_length=MAX_TRIP_DAYS)
+    route_ids: list[str] | None = Field(default=None, max_length=MAX_TRIP_DAYS * 3)
     rest_days: list[Date] | None = None
+    trail_type: str = Field(default="jeju_olle", pattern=r"^(jeju_olle|hayoung_olle)$")
 
 
 @router.post("/{trip_id}/plan")
 def generate_plan(trip_id: str, body: PlanIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     t = owned_trip(db, user, trip_id)
-    drafts = schedule_service.generate_plan(db, t, user.preferences, body.route_ids, body.rest_days)
+    drafts = schedule_service.generate_plan(db, t, user.preferences, body.route_ids, body.rest_days, body.trail_type)
     return {"drafts": [schedule_service.schedule_to_dict(d) for d in drafts],
             "message": "일정 초안입니다. 확인 후 승인해야 확정됩니다."}
 
@@ -124,6 +126,7 @@ def generate_plan(trip_id: str, body: PlanIn, user: User = Depends(current_user)
 class ChangeIn(BaseModel):
     date: Date
     route_id: str | None = None
+    extra_route_ids: list[str] = Field(default_factory=list, max_length=3)
     planned_start: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     note: str | None = Field(default=None, max_length=500)
 

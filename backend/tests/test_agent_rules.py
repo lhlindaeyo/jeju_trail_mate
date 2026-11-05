@@ -50,7 +50,7 @@ def _fixture_session(db, accuracy: float, now_utc: datetime):
     user = User(email=f"rules-{accuracy}-{now_utc.timestamp()}@x.com")
     user.preferences = UserPreferences(walk_end_time="18:00", rest_every_minutes=0, pace_kmh=4.0)
     db.add(user)
-    route = db.query(TrailRoute).filter_by(official_code="6").one()
+    route = db.query(TrailRoute).filter_by(trail_type="jeju_olle", course_no="6").one()
     local = now_utc.astimezone(KST)
     trip = Trip(user=user, title="t", start_date=local.date(), end_date=local.date())
     db.add(trip)

@@ -88,3 +88,49 @@ def latlon_to_kma_grid(lat: float, lon: float) -> tuple[int, int]:
     x = int(math.floor(ra * math.sin(theta) + xo + 0.5))
     y = int(math.floor(ro - ra * math.cos(theta) + yo + 0.5))
     return x, y
+
+
+# --- Polyline helpers (route progress / off-route) ------------------------------------
+# Local equirectangular projection: accurate to well under 1 m over a few km, plenty for
+# progress and deviation checks on a city-scale route.
+def _xy(lat: float, lon: float, lat0: float) -> tuple[float, float]:
+    k = 111_320.0
+    return (lon * k * math.cos(math.radians(lat0)), lat * 110_540.0)
+
+
+def path_length_m(path: list[list[float]]) -> float:
+    return sum(haversine_m(a[0], a[1], b[0], b[1]) for a, b in zip(path, path[1:]))
+
+
+def project_on_path(path: list[list[float]], lat: float, lon: float,
+                    along_range: tuple[float, float] | None = None) -> tuple[float, float]:
+    """Return (distance_from_path_m, along_m) for the closest point on the polyline.
+
+    `along_range` restricts matching to a window of the route; loop routes (start == end,
+    like Hayoung Olle) would otherwise snap the start onto the final segment."""
+    if len(path) < 2:
+        raise ValueError("path needs at least two points")
+    lat0 = path[0][0]
+    px, py = _xy(lat, lon, lat0)
+    best = (float("inf"), 0.0)
+    best_in = (float("inf"), 0.0)
+    acc = 0.0
+    for a, b in zip(path, path[1:]):
+        ax, ay = _xy(a[0], a[1], lat0)
+        bx, by = _xy(b[0], b[1], lat0)
+        dx, dy = bx - ax, by - ay
+        seg2 = dx * dx + dy * dy
+        seg_len = math.sqrt(seg2)
+        t = 0.0 if seg2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg2))
+        if along_range and seg_len > 0:
+            lo_t, hi_t = (along_range[0] - acc) / seg_len, (along_range[1] - acc) / seg_len
+            if hi_t >= 0 and lo_t <= 1:
+                tt = max(max(lo_t, 0.0), min(t, min(hi_t, 1.0)))
+                d_in = math.hypot(px - (ax + tt * dx), py - (ay + tt * dy))
+                if d_in < best_in[0]:
+                    best_in = (d_in, acc + tt * seg_len)
+        d = math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+        if d < best[0]:
+            best = (d, acc + t * seg_len)
+        acc += seg_len
+    return best_in if along_range and best_in[0] != float("inf") else best

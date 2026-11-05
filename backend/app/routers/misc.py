@@ -133,8 +133,8 @@ def delete_account(user: User = Depends(current_user), db: Session = Depends(get
 
 class RouteVerifyIn(BaseModel):
     distance_km: float | None = Field(default=None, gt=0, le=40)
-    difficulty: str | None = Field(default=None, pattern=r"^(상|중|하)$")
-    estimated_duration_min: int | None = Field(default=None, gt=0, le=900)
+    duration_min_low: int | None = Field(default=None, gt=0, le=900)
+    duration_min_high: int | None = Field(default=None, gt=0, le=900)
     start_point: str | None = None
     end_point: str | None = None
     source_url: str | None = None

@@ -131,9 +131,12 @@ class MockLLM:
         (("날씨", "비", "바람", "예보"), "get_weather", {}),
         (("공지", "우회", "통제", "폐쇄"), "get_route_notices", {}),
         (("도착", "남은", "언제", "몇 시"), "estimate_arrival", {}),
-        (("카페",), "get_nearby_places", {"category": "cafe"}),
-        (("식당", "맛집", "밥", "점심", "저녁"), "get_nearby_places", {"category": "food"}),
-        (("숙소", "숙박"), "get_nearby_places", {"category": "lodging"}),
+        (("다음 경유지", "다음 포인트", "경유지까지"), "get_next_waypoint", {}),
+        (("경유지",), "get_waypoints", {}),
+        (("카페",), "find_places_near", {"category": "cafe"}),
+        (("식당", "맛집", "밥", "점심", "저녁"), "find_places_near", {"category": "food"}),
+        (("쉬어", "쉼터", "휴식"), "find_places_near", {"category": "rest"}),
+        (("화장실",), "find_places_near", {"category": "toilet"}),
         (("일기",), "create_journal_draft", {}),
         (("일정", "계획"), "get_trip_plan", {}),
         (("코스",), "list_routes", {}),
@@ -172,11 +175,21 @@ def _summarize(tool: str, out: Any) -> str:
         if tool == "get_weather" and out.get("forecast"):
             f = out["forecast"][0]
             return f"{f['time'][11:16]} 기준 {f['sky']}, {f['temp_c']}°C, 강수확률 {f['precip_prob_pct']}% (출처: {out['source']}, 발표 {out['base_time']})"
-        if tool == "get_nearby_places":
+        if tool == "find_places_near":
             places = out.get("places", [])
             if not places:
-                return "주변에서 확인된 장소가 없습니다."
-            return "\n".join(f"- {p['name']} ({p['distance_m']}m)" for p in places[:5]) + f"\n{out['caveat']}"
+                return out.get("message") or "주변에서 확인된 장소가 없습니다."
+            src = ", ".join(f"{s['name']}({s['ref_date'] or '기준일 미상'})" for s in out.get("sources", []))
+            return "\n".join(f"- {p['name']} ({p['distance_m']}m)" for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"
+        if tool == "get_next_waypoint" and out.get("next"):
+            n = out["next"]
+            dist = f" 약 {n['distance_m']}m 남았어요." if n.get("distance_m") is not None else ""
+            seen = f" 지나온 곳: {', '.join(out['visited'])}." if out.get("visited") else ""
+            return f"다음 경유지는 {n['name']}입니다.{dist}{seen}"
+        if tool == "get_waypoints" and out.get("waypoints"):
+            names = " → ".join(w["name"] for w in out["waypoints"])
+            geo = "" if out.get("has_geometry") else " (경로 좌표 적재 전)"
+            return f"{out['route']} 경유지: {names}{geo}"
         if "message" in out:
             return str(out["message"])
     return json.dumps(out, ensure_ascii=False, default=str)[:1500]

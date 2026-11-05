@@ -11,10 +11,13 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import Notification, TrackingSession, User
 from ..services import route_service, schedule_service, weather_service
-from ..services.geo import KST, as_utc, hhmm_to_minutes, sunset_kst
-from ..services.tracking_service import progress_summary
+from ..services.geo import KST, as_utc, haversine_m, hhmm_to_minutes, sunset_kst
+from ..services.tracking_service import OFF_ROUTE_M, ROUTE_MATCH_ACCURACY_M, progress_summary, route_progress
 
-EVENT_TYPES = ["schedule_delay", "rest_reminder", "end_time_risk", "route_notice", "notice_unverified", "weather", "journal_prompt"]
+EVENT_TYPES = ["waypoint_arrival", "off_route", "endpoint_near", "schedule_delay", "rest_reminder", "end_time_risk",
+               "route_notice", "notice_unverified", "weather", "journal_prompt"]
+OFF_ROUTE_SUSTAIN = timedelta(minutes=2)
+ENDPOINT_NEAR_M = 150.0
 RAIN_PROB_THRESHOLD = 60
 
 
@@ -40,6 +43,7 @@ ACT_LATER = {"id": "later", "label": "나중에"}
 ACT_SNOOZE = {"id": "snooze_today", "label": "오늘은 그만"}
 ACT_NOTICE = {"id": "open_notice", "label": "공지 원문 열기"}
 ACT_JOURNAL = {"id": "open_journal", "label": "기록하기"}
+ACT_PHOTO = {"id": "open_journal", "label": "사진 남기기"}
 
 
 def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | None = None, *, weather: dict | None = None) -> list[Event]:
@@ -69,9 +73,38 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
                                 f"{n.title}\n공식 공지를 확인하고 일정을 다시 검토하세요.", [ACT_NOTICE, ACT_REPLAN],
                                 {"url": n.source_url, "verified_at": n.verified_at.isoformat() if n.verified_at else None}))
         if route_service.route_freshness(route, now)["notices_status"] != "checked":
+            payload = route_service.notices_payload(db, route)
             events.append(Event("notice_unverified", f"notice_unverified:{route.id}", "info", "공지 최신 확인 필요",
-                                "최근 24시간 내 확인된 공식 공지 정보가 없습니다. 출발 전 제주올레 공식 사이트에서 우회·통제 공지를 확인하세요.",
-                                [ACT_NOTICE, ACT_LATER], {"url": route_service.OFFICIAL_TRAIL_URL}))
+                                payload["caveat"], [ACT_NOTICE, ACT_LATER], {"url": payload["official_url"]}))
+
+        # 1b) Waypoint check-ins (routes with located waypoints) → offer a photo/diary entry.
+        for v in sorted(session.visits, key=lambda v: v.arrived_at):
+            w = v.waypoint
+            if w.kind == "S":
+                continue
+            done = w.kind == "F"
+            events.append(Event("waypoint_arrival", f"waypoint:{w.id}", "info",
+                                "코스 완주 지점 도착" if done else f"경유지 도착 · {w.name}",
+                                (f"{route.name}의 도착 지점이에요. 오늘 걸은 길을 기록해 볼까요?" if done
+                                 else f"{w.name} 근처예요. 사진을 남기고 일기에 연결할까요?"),
+                                [{**ACT_PHOTO, "waypoint_id": w.id}, ACT_LATER],
+                                {"waypoint": w.name, "data": "하영올레 SHP (제주데이터허브)"}))
+
+        # 1c) Possible deviation — only with good fixes, sustained, phrased as "위치 확인".
+        if (route.has_geometry and session.off_route_since and session.off_route_m
+                and session.off_route_m > OFF_ROUTE_M and (session.last_accuracy_m or 999) <= ROUTE_MATCH_ACCURACY_M
+                and as_utc(session.last_point_at or now) - as_utc(session.off_route_since) >= OFF_ROUTE_SUSTAIN):
+            events.append(Event("off_route", "off_route", "info", "위치 확인이 필요해요",
+                                f"경로에서 약 {round(session.off_route_m)}m 떨어진 것 같아요. 건물·신호 대기로 생긴 오차일 수 있으니 "
+                                "지도에서 위치를 확인해 주세요.", [ACT_MAP, ACT_LATER], dedupe_window_min=15))
+
+        # 1d) Official Olle courses have no path data: confirm proximity to the end point if known.
+        if not route.has_geometry and route.end_lat is not None and session.last_lat is not None and gps_ok:
+            d = haversine_m(session.last_lat, session.last_lon, route.end_lat, route.end_lon)
+            if d <= ENDPOINT_NEAR_M:
+                events.append(Event("endpoint_near", f"endpoint:{route.id}", "info", "종점 근처",
+                                    f"{route.end_point} 근처(약 {round(d)}m)예요. 기록을 남기고 세션을 마칠까요?",
+                                    [ACT_JOURNAL, ACT_LATER]))
 
     # 2) Schedule delay — only when GPS is trustworthy (spec guardrail).
     exp, act = summary["expected_progress"], summary["actual_progress"]
@@ -89,9 +122,9 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
                             f"{summary['active_minutes']}분째 걷고 있어요. 설정하신 대로 잠깐 쉬어 가는 건 어떨까요?", [ACT_LATER, ACT_SNOOZE]))
 
     # 4) End time / sunset risk (safety).
-    if route:
-        walked = session.manual_distance_m if session.tracking_mode == "manual" and session.manual_distance_m is not None else session.distance_m
-        eta = schedule_service.estimate_arrival(route_distance_km=route.distance_km, walked_m=walked, pace_kmh=prefs.pace_kmh,
+    prog = route_progress(session)
+    if route and prog["done_m"] is not None:
+        eta = schedule_service.estimate_arrival(route_distance_km=route.distance_km, walked_m=prog["done_m"], pace_kmh=prefs.pace_kmh,
                                                 rest_every_minutes=prefs.rest_every_minutes, now=local)
         sunset = sunset_kst(local.date())
         end_target = local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=hhmm_to_minutes(prefs.walk_end_time))

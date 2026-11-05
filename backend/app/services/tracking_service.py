@@ -8,11 +8,15 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import GpsPoint, TrackingSession
-from .geo import KST, haversine_m, hhmm_to_minutes, valid_coordinate
+from ..models import GpsPoint, TrackingSession, WaypointVisit
+from .geo import KST, haversine_m, hhmm_to_minutes, project_on_path, valid_coordinate
 
 MAX_WALKING_SPEED_MS = 4.0  # ~14 km/h — faster segments are treated as GPS jumps / vehicle
 RAW_POINT_RETENTION_DAYS = 30
+ROUTE_MATCH_ACCURACY_M = 30.0  # fixes worse than this never move progress or trigger check-ins
+OFF_ROUTE_M = 50.0  # distance from the path that counts as "possibly off route" (tune in field test)
+WAYPOINT_RADIUS_M = 40.0  # check-in radius (tune in field test)
+MATCH_BACK_M, MATCH_AHEAD_M = 200.0, 1000.0  # search window along the route around current progress
 
 
 def _aware(dt: datetime | None) -> datetime | None:
@@ -52,6 +56,7 @@ def ingest_points(db: Session, s: TrackingSession, points: list[dict]) -> dict:
         return {"accepted": 0, "rejected": len(points), "reason": f"session is {s.status}"}
     min_acc = get_settings().min_gps_accuracy_m
     accepted = rejected = 0
+    new_visits: list[WaypointVisit] = []
     for p in sorted(points, key=lambda x: x["timestamp"]):
         ts = _aware(p["timestamp"])
         lat, lon, acc = p["lat"], p["lon"], p.get("accuracy_m")
@@ -70,18 +75,94 @@ def ingest_points(db: Session, s: TrackingSession, points: list[dict]) -> dict:
         if good:
             s.last_lat, s.last_lon, s.last_point_at = lat, lon, ts
         s.last_accuracy_m = acc
+        if acc is not None and acc <= ROUTE_MATCH_ACCURACY_M:
+            new_visits += _match_route(db, s, lat, lon, acc, ts)
     db.commit()
-    return {"accepted": accepted, "rejected": rejected, "distance_m": round(s.distance_m, 1)}
+    return {"accepted": accepted, "rejected": rejected, "distance_m": round(s.distance_m, 1),
+            "new_waypoint_visits": [v.waypoint.name for v in new_visits]}
+
+
+def _match_route(db: Session, s: TrackingSession, lat: float, lon: float, acc: float, ts: datetime) -> list[WaypointVisit]:
+    """Advance along-route progress, track deviation and record waypoint check-ins."""
+    route = s.route
+    if not route or not route.has_geometry or not route.path:
+        return []
+    length = (route.distance_km or 0) * 1000
+    cur = s.progress_m or 0.0
+    dist, along = project_on_path(route.path, lat, lon, (max(cur - MATCH_BACK_M, 0.0), cur + MATCH_AHEAD_M))
+    if dist <= OFF_ROUTE_M:
+        s.progress_m = max(cur, along)
+        s.off_route_since = None
+    elif s.off_route_since is None:
+        s.off_route_since = ts
+    s.off_route_m = dist
+    visited = {v.waypoint_id for v in s.visits}
+    out = []
+    for w in route.waypoints:
+        if w.id in visited or w.lat is None or acc > WAYPOINT_RADIUS_M:
+            continue
+        if w.kind == "F" and (s.progress_m or 0) < 0.8 * length:
+            continue  # loop route: the finish point equals the start
+        if haversine_m(lat, lon, w.lat, w.lon) <= WAYPOINT_RADIUS_M:
+            v = WaypointVisit(waypoint_id=w.id, waypoint=w, arrived_at=ts, accuracy_m=acc)
+            s.visits.append(v)
+            visited.add(w.id)
+            out.append(v)
+            if w.along_m is not None and w.kind != "S":
+                s.progress_m = max(s.progress_m or 0.0, w.along_m)
+    return out
+
+
+def walked_m(s: TrackingSession) -> float:
+    return s.manual_distance_m if s.tracking_mode == "manual" and s.manual_distance_m is not None else s.distance_m
+
+
+def route_progress(s: TrackingSession) -> dict:
+    """Progress along the route: path-based when geometry exists, else GPS distance / course length."""
+    route = s.route
+    if not route or not route.distance_km:
+        return {"basis": "none", "done_m": None, "remaining_m": None, "ratio": None}
+    length = route.distance_km * 1000
+    if route.has_geometry and s.tracking_mode == "gps":
+        done = min(s.progress_m or 0.0, length)
+        basis = "route_geometry"
+    else:
+        done = min(walked_m(s), length)
+        basis = "gps_distance" if s.tracking_mode == "gps" else "manual"
+    return {"basis": basis, "done_m": done, "remaining_m": max(length - done, 0.0), "ratio": done / length}
+
+
+def next_waypoint(s: TrackingSession) -> dict | None:
+    route = s.route
+    if not route or not route.waypoints:
+        return None
+    visited = {v.waypoint_id for v in s.visits}
+    done = s.progress_m or 0.0
+    for w in route.waypoints:
+        if w.id in visited or w.kind == "S":
+            continue
+        if w.along_m is not None and w.along_m < done - MATCH_BACK_M:
+            continue
+        return {"id": w.id, "code": w.code, "name": w.name,
+                "distance_m": round(max(w.along_m - done, 0)) if w.along_m is not None and route.has_geometry else None,
+                "location": [w.lat, w.lon] if w.lat is not None else None}
+    return None
+
+
+NOTES = {
+    "route_geometry": "진행률은 하영올레 경로 데이터(제주데이터허브 SHP) 위에 GPS 위치를 맞춰 계산했습니다.",
+    "gps_distance": "진행률은 GPS 누적 거리를 코스 총거리로 나눈 추정치입니다(공식 경로 좌표 없음).",
+    "manual": "진행률은 직접 입력한 거리 기준입니다.",
+    "none": "이 코스는 거리 데이터가 없어 진행률을 계산하지 않습니다.",
+}
 
 
 def progress_summary(s: TrackingSession, schedule=None, now: datetime | None = None) -> dict:
     """Compact summary used by rules engine, UI and the AI context builder."""
     now = now or datetime.now(timezone.utc)
-    walked = s.manual_distance_m if s.tracking_mode == "manual" and s.manual_distance_m is not None else s.distance_m
-    route_km = s.route.distance_km if s.route else None
-    actual_ratio = min(walked / (route_km * 1000), 1.0) if route_km else None
+    prog = route_progress(s)
     expected_ratio = None
-    if schedule and schedule.planned_start and schedule.planned_end:
+    if schedule and schedule.planned_start and schedule.planned_end and schedule.route_id == s.route_id:
         start = hhmm_to_minutes(schedule.planned_start)
         end_ = hhmm_to_minutes(schedule.planned_end)
         local = now.astimezone(KST)
@@ -91,20 +172,30 @@ def progress_summary(s: TrackingSession, schedule=None, now: datetime | None = N
     acc = s.last_accuracy_m
     gps_quality = "unknown" if acc is None else ("good" if acc <= get_settings().min_gps_accuracy_m else "poor")
     stale = s.last_point_at is None or now - _aware(s.last_point_at) > timedelta(minutes=10)
+    route = s.route
     return {
         "session_id": s.id,
         "status": s.status,
         "tracking_mode": s.tracking_mode,
-        "route": s.route.name if s.route else None,
-        "route_distance_km": route_km,
-        "walked_km": round(walked / 1000, 2),
+        "route": route.name if route else None,
+        "route_id": route.id if route else None,
+        "trail_type": route.trail_type if route else None,
+        "route_distance_km": route.distance_km if route else None,
+        "walked_km": round(walked_m(s) / 1000, 2),
+        "done_km": round(prog["done_m"] / 1000, 2) if prog["done_m"] is not None else None,
+        "remaining_km": round(prog["remaining_m"] / 1000, 2) if prog["remaining_m"] is not None else None,
         "active_minutes": round(active_minutes(s, now)),
-        "actual_progress": round(actual_ratio, 3) if actual_ratio is not None else None,
+        "actual_progress": round(prog["ratio"], 3) if prog["ratio"] is not None else None,
         "expected_progress": round(expected_ratio, 3) if expected_ratio is not None else None,
+        "progress_basis": prog["basis"],
+        "next_waypoint": next_waypoint(s),
+        "visited_waypoints": [v.waypoint.name for v in sorted(s.visits, key=lambda v: v.arrived_at)],
+        "off_route_m": round(s.off_route_m) if s.off_route_m is not None and route and route.has_geometry else None,
         "gps_quality": gps_quality,
+        "gps_accuracy_m": round(acc) if acc is not None else None,
         "gps_stale": stale if s.tracking_mode == "gps" else False,
         "last_position": [round(s.last_lat, 4), round(s.last_lon, 4)] if s.last_lat is not None else None,
-        "note": "진행률은 GPS 누적 거리를 코스 총거리로 나눈 추정치입니다(공식 경로 좌표 미사용).",
+        "note": NOTES[prog["basis"]],
     }
 
 

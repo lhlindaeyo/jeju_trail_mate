@@ -24,3 +24,7 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/settings.local.json
+
+# Raw downloaded datasets (license-dependent) — keep out of git
+data/raw/*
+!data/raw/README.md

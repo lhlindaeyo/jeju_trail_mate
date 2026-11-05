@@ -30,13 +30,33 @@ def test_media_upload_and_signed_url(client, auth):
 
 
 def test_book_lifecycle(client, auth):
-    trip = make_trip(client, auth, "2026-11-10", "2026-11-12")
-    e = client.post("/v1/journals", headers=auth, json={"trip_id": trip, "date": "2026-11-10", "text": "첫날, <b>설렜다</b>"}).json()
+    from datetime import date, timedelta
+
+    from app.services.geo import now_kst
+
+    from .conftest import route_id
+
+    today = now_kst().date()
+    d0, d1 = (today - timedelta(days=2)).isoformat(), today.isoformat()
+    trip = make_trip(client, auth, d0, d1)
+    e = client.post("/v1/journals", headers=auth, json={"trip_id": trip, "date": d0, "text": "첫날, <b>설렜다</b>"}).json()
+
+    # Locked until a course is completed (last day already reached).
+    elig = client.get(f"/v1/trips/{trip}/book/eligibility", headers=auth).json()
+    assert not elig["eligible"] and any("완주" in r for r in elig["reasons"])
+    assert client.post(f"/v1/trips/{trip}/book", headers=auth, json={"title": "x"}).status_code == 409
+
+    s = client.post("/v1/sessions", headers=auth, json={"trip_id": trip, "route_id": route_id(client, "10-1"), "tracking_mode": "manual"}).json()
+    client.post(f"/v1/sessions/{s['session_id']}/manual", headers=auth, json={"distance_km": 4.3})
+    client.post(f"/v1/sessions/{s['session_id']}/end", headers=auth)
+    assert client.get(f"/v1/trips/{trip}/book/eligibility", headers=auth).json()["eligible"]
+
     b = client.post(f"/v1/trips/{trip}/book", headers=auth, json={"title": "나의 올레"}).json()
     assert b["status"] == "preview_ready", b
     html = client.get(b["preview_url"]).text
     assert "&lt;b&gt;설렜다&lt;/b&gt;" in html  # user text is escaped
-    assert html.count("이 날의 기록이 없습니다") == 2  # empty days are not filled in
+    assert html.count("이 날의 기록이 없습니다") == 1  # the middle day stays empty
+    assert "제주올레 10-1코스" in html and "하영올레 — 앱 기록상 완주" in html
     assert "공식 스탬프" in html
 
     assert client.get(f"/v1/books/{b['id']}/export", headers=auth).status_code == 409  # must approve first

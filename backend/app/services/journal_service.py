@@ -33,15 +33,40 @@ def _session_line(s: TrackingSession) -> str:
     return f"- {route}, 기록된 이동 거리 {km:.1f}km"
 
 
+def passed_places(sessions: list[TrackingSession]) -> list[str]:
+    """Waypoints actually checked in (fact log), in order — '지나온 곳'."""
+    visits = sorted((v for s in sessions for v in s.visits), key=lambda v: v.arrived_at)
+    return [v.waypoint.name for v in visits if v.waypoint.kind == "W"]
+
+
+MAX_DIARY_LINES = 3
+MAX_DIARY_CHARS = 150
+
+
+def validate_diary_text(text: str) -> str:
+    text = (text or "").replace("\r\n", "\n").strip()
+    if not text:
+        raise ValueError("한 줄 이상 적어 주세요.")
+    if len(text.split("\n")) > MAX_DIARY_LINES:
+        raise ValueError(f"글은 최대 {MAX_DIARY_LINES}줄까지 쓸 수 있어요.")
+    if len(text) > MAX_DIARY_CHARS:
+        raise ValueError(f"글은 {MAX_DIARY_CHARS}자까지 쓸 수 있어요.")
+    return text
+
+
 def build_journal_input(records: dict, style: str | None) -> str:
     lines = ["[확인된 이동 기록]"]
     lines += [_session_line(s) for s in records["sessions"]] or ["- 없음"]
+    passed = passed_places(records["sessions"])
+    if passed:
+        lines.append("[지나온 곳 — 체크인 기록, 감상 없음] " + ", ".join(passed))
     lines.append("\n[사용자 기록] (시간순)")
     for m in records["memos"]:
         t = to_kst(m.captured_at).strftime("%H:%M") if m.captured_at else "시간 미상"
         body = (m.user_edited_text or m.text or "").strip()
+        place = f"[{m.waypoint.name}] " if m.waypoint else ""
         if body:
-            lines.append(f"- {t} {'★' if m.is_highlight else ''}{body}")
+            lines.append(f"- {t} {place}{'★' if m.is_highlight else ''}{body}")
         for media in m.media:
             if media.caption:
                 lines.append(f"  · 사진 설명(사용자 작성): {media.caption}")
@@ -57,6 +82,9 @@ def _fallback_daily(records: dict) -> str:
     parts = []
     if records["sessions"]:
         parts.append("오늘의 걷기: " + ", ".join(_session_line(s)[2:] for s in records["sessions"]) + ".")
+        passed = passed_places(records["sessions"])
+        if passed:
+            parts.append("지나온 곳: " + ", ".join(passed))
     for m in records["memos"]:
         body = (m.user_edited_text or m.text or "").strip()
         if body:
@@ -128,6 +156,8 @@ def entry_to_dict(e: JournalEntry, media_urls: dict[str, str] | None = None) -> 
         "mood_tags": e.mood_tags or [],
         "is_highlight": e.is_highlight,
         "location": [e.lat, e.lon] if e.lat is not None else None,
+        "waypoint": {"id": e.waypoint.id, "name": e.waypoint.name} if e.waypoint else None,
+        "route_name": e.waypoint.route.name if e.waypoint else None,
         "captured_at": e.captured_at.isoformat() if e.captured_at else None,
         "status": e.status,
         "media": [

@@ -47,7 +47,7 @@ def test_plan_requires_approval(client, auth):
 
 
 def test_plan_respects_end_time(client, auth):
-    client.patch("/v1/me/preferences", headers=auth, json={"walk_end_time": "10:00", "daily_distance_target_km": 20})
+    client.patch("/v1/me/preferences", headers=auth, json={"walk_end_time": "08:30", "daily_distance_target_km": 20})
     trip = make_trip(client, auth, "2026-11-10", "2026-11-10")
     d = client.post(f"/v1/trips/{trip}/plan", headers=auth, json={}).json()["drafts"][0]
     assert d["route"] is None and "맞는 코스가 없어" in d["note"]

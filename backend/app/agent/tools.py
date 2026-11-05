@@ -12,22 +12,29 @@ from ..models import AgentProposal, TrackingSession, Trip, User
 from ..services import poi_service, route_service, schedule_service, weather_service
 from ..services import journal_service
 from ..services.geo import JEJU_CENTER, now_kst
-from ..services.tracking_service import progress_summary
+from ..services.tracking_service import progress_summary, route_progress
 from .llm import ToolSpec
 
 TOOLS: list[ToolSpec] = [
-    ToolSpec("list_routes", "제주올레 코스 목록을 조회한다. 난이도·최대 거리·태그로 필터링할 수 있다.", {
+    ToolSpec("list_routes", "코스 목록을 조회한다. trail_type으로 제주올레(jeju_olle, 사단법인 제주올레)와 "
+             "하영올레(hayoung_olle, 서귀포시 도심 순환길)를 구분한다. 두 길은 서로 다른 길이다.", {
         "type": "object",
         "properties": {
-            "difficulty": {"type": "string", "enum": ["상", "중", "하"]},
+            "trail_type": {"type": "string", "enum": ["jeju_olle", "hayoung_olle"]},
             "max_km": {"type": "number"},
-            "tag": {"type": "string", "description": "예: 바다, 오름, 카페, 문화, 숲"},
         },
     }),
-    ToolSpec("get_route", "코스 상세(거리, 난이도, 예상 시간, 시작·종료 지점, 데이터 확인 상태)를 조회한다.", {
+    ToolSpec("get_route", "코스 상세(유형, 운영 주체, 거리, 소요 시간 범위, 시점·종점, 경유지, 출처·기준일)를 조회한다.", {
         "type": "object",
-        "properties": {"route": {"type": "string", "description": "코스 번호(예: '7') 또는 코스 id"}},
+        "properties": {"route": {"type": "string", "description": "예: '7'(제주올레), '하영올레 2코스', 또는 코스 id"}},
         "required": ["route"],
+    }),
+    ToolSpec("get_waypoints", "하영올레 코스의 경유지 목록(순서·좌표 보유 여부)을 조회한다. 경로 데이터가 없으면 has_geometry=false.", {
+        "type": "object",
+        "properties": {"route": {"type": "string", "description": "예: '하영올레 1코스'. 생략 시 현재 세션/오늘 코스"}},
+    }),
+    ToolSpec("get_next_waypoint", "진행 중인 세션 기준 다음 경유지와 남은 거리, 지금까지 지나온 경유지를 조회한다.", {
+        "type": "object", "properties": {},
     }),
     ToolSpec("get_route_notices", "코스의 공식 우회·통제·안전 공지와 마지막 공지 확인 시각을 조회한다. route 생략 시 오늘 일정/진행 중 세션의 코스.", {
         "type": "object",
@@ -37,11 +44,12 @@ TOOLS: list[ToolSpec] = [
         "type": "object",
         "properties": {"lat": {"type": "number"}, "lon": {"type": "number"}, "hours": {"type": "integer", "minimum": 1, "maximum": 48}},
     }),
-    ToolSpec("get_nearby_places", "검증된 관광 데이터(TourAPI)에서 주변 장소를 거리순으로 조회한다. 영업 여부는 확인되지 않는다.", {
+    ToolSpec("find_places_near", "적재된 공공 데이터(poi_places)에서 현재 위치 주변 장소를 거리순으로 찾는다. "
+             "영업 상태는 데이터 기준일의 공개 값이며 실시간이 아니다. 출처를 함께 돌려준다.", {
         "type": "object",
         "properties": {
-            "category": {"type": "string", "enum": ["food", "cafe", "lodging", "attraction", "culture", "shopping"]},
-            "radius_m": {"type": "integer", "minimum": 100, "maximum": 20000},
+            "category": {"type": "string", "enum": ["food", "cafe", "rest", "toilet", "wifi"]},
+            "radius_m": {"type": "integer", "minimum": 100, "maximum": 5000},
         },
         "required": ["category"],
     }),
@@ -105,9 +113,36 @@ class ToolContext:
         return sched.route if sched else None
 
     # --- tool implementations -------------------------------------------------------
-    def list_routes(self, difficulty=None, max_km=None, tag=None):
-        routes = route_service.list_routes(self.db, difficulty=difficulty, max_km=max_km, tag=tag)
-        return {"routes": [route_service.route_to_dict(r) for r in routes], "official_url": route_service.OFFICIAL_TRAIL_URL}
+    def list_routes(self, trail_type=None, max_km=None):
+        routes = route_service.list_routes(self.db, trail_type=trail_type, max_km=max_km)
+        brief = [{k: d[k] for k in ("id", "trail_label", "name", "subtitle", "distance_km", "duration_min_low",
+                                    "duration_min_high", "start_point", "end_point", "has_geometry")}
+                 for d in map(route_service.route_to_dict, routes)]
+        return {"routes": brief, "sources": [route_service.source_to_dict(s) for s in {r.source for r in routes if r.source}],
+                "note": "하영올레는 서귀포시가 운영하는 별개의 길이며 제주올레 완주에 포함되지 않습니다."}
+
+    def get_waypoints(self, route=None):
+        r = route_service.find_route(self.db, route) if route else self._default_route()
+        if not r:
+            return {"status": "not_found", "message": "어느 코스인지 알 수 없습니다."}
+        if not r.waypoints:
+            return {"status": "unavailable", "route": r.name,
+                    "message": "이 코스는 경유지 데이터가 없습니다. 공식 사이트에서 확인하세요.", "official_url": r.source_url}
+        return {"route": r.name, "trail_type": r.trail_type, "has_geometry": r.has_geometry,
+                "waypoints": [route_service.waypoint_to_dict(w) for w in r.waypoints],
+                "source": route_service.source_to_dict(r.source)}
+
+    def get_next_waypoint(self):
+        s = self.session
+        if not s or s.status == "ended":
+            return {"status": "unavailable", "message": "진행 중인 트레킹 세션이 없습니다."}
+        summary = progress_summary(s, self.today_schedule())
+        nxt = summary["next_waypoint"]
+        if not nxt:
+            return {"status": "unavailable", "message": "이 코스에는 다음 경유지 정보가 없습니다.", "visited": summary["visited_waypoints"]}
+        return {"next": nxt, "visited": summary["visited_waypoints"], "progress_basis": summary["progress_basis"],
+                "gps_accuracy_m": summary["gps_accuracy_m"],
+                "message": None if nxt["distance_m"] is not None else "경로 데이터가 없어 거리를 계산하지 않았습니다."}
 
     def get_route(self, route):
         r = route_service.find_route(self.db, route)
@@ -133,12 +168,12 @@ class ToolContext:
                 lat, lon = JEJU_CENTER
         return weather_service.get_weather(lat, lon, hours)
 
-    def get_nearby_places(self, category, radius_m=2000):
+    def find_places_near(self, category, radius_m=1000):
         loc = self._location()
         if not loc:
             return {"status": "unavailable", "places": [],
                     "message": "현재 위치를 알 수 없습니다. 트레킹 세션을 시작하고 위치 사용을 허용하면 주변 장소를 찾아볼 수 있어요."}
-        return poi_service.get_nearby_places(loc[0], loc[1], category, radius_m)
+        return poi_service.find_places_near(self.db, loc[0], loc[1], category, radius_m)
 
     def estimate_arrival(self):
         s = self.session
@@ -146,9 +181,12 @@ class ToolContext:
             return {"status": "unavailable", "message": "진행 중인 트레킹 세션이 없습니다."}
         if not s.route:
             return {"status": "unavailable", "message": "세션에 코스가 지정되지 않아 남은 거리를 계산할 수 없습니다."}
-        walked = s.manual_distance_m if s.tracking_mode == "manual" and s.manual_distance_m is not None else s.distance_m
-        out = schedule_service.estimate_arrival(route_distance_km=s.route.distance_km, walked_m=walked,
+        prog = route_progress(s)
+        if prog["done_m"] is None:
+            return {"status": "unavailable", "message": "이 코스는 거리 데이터가 없어 도착 시각을 계산할 수 없습니다."}
+        out = schedule_service.estimate_arrival(route_distance_km=s.route.distance_km, walked_m=prog["done_m"],
                                                 pace_kmh=self.prefs.pace_kmh, rest_every_minutes=self.prefs.rest_every_minutes)
+        out["progress_basis"] = prog["basis"]
         summary = progress_summary(s, self.today_schedule())
         if summary["gps_quality"] == "poor" or summary["gps_stale"]:
             out["confidence"] = "low"

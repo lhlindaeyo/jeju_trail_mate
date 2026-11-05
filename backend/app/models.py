@@ -53,10 +53,29 @@ class UserPreferences(Base):
     user: Mapped[User] = relationship(back_populates="preferences")
 
 
+class DataSource(Base):
+    """Registry of every external dataset: where it came from, when, under which terms (v1.2 §07)."""
+
+    __tablename__ = "data_sources"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)  # stable slug, e.g. "olle_course_status"
+    name: Mapped[str] = mapped_column(String(300))
+    provider: Mapped[str] = mapped_column(String(200))
+    platform_url: Mapped[str | None] = mapped_column(String(500))
+    license: Mapped[str] = mapped_column(String(300), default="확인 필요")
+    ref_date: Mapped[str | None] = mapped_column(String(20))  # data reference date as published (e.g. 2020-01-14)
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    file_hash: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="seed")  # seed | imported
+    note: Mapped[str | None] = mapped_column(Text)
+
+
 class TrailRoute(Base):
     __tablename__ = "trail_routes"
+    __table_args__ = (UniqueConstraint("trail_type", "course_no"),)
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    official_code: Mapped[str] = mapped_column(String(20), unique=True)
+    trail_type: Mapped[str] = mapped_column(String(20), default="jeju_olle", index=True)  # jeju_olle | hayoung_olle
+    operator: Mapped[str] = mapped_column(String(100))  # 사단법인 제주올레 | 서귀포시
+    course_no: Mapped[str] = mapped_column(String(20))  # '7', '3-A', '1-1' …
     name: Mapped[str] = mapped_column(String(200))
     start_point: Mapped[str | None] = mapped_column(String(200))
     end_point: Mapped[str | None] = mapped_column(String(200))
@@ -64,10 +83,13 @@ class TrailRoute(Base):
     start_lon: Mapped[float | None] = mapped_column(Float)
     end_lat: Mapped[float | None] = mapped_column(Float)
     end_lon: Mapped[float | None] = mapped_column(Float)
-    distance_km: Mapped[float] = mapped_column(Float)
-    difficulty: Mapped[str] = mapped_column(String(20))  # 상 | 중 | 하
-    estimated_duration_min: Mapped[int] = mapped_column(Integer)
+    distance_km: Mapped[float | None] = mapped_column(Float)  # None until known (e.g. Hayoung before SHP import)
+    duration_min_low: Mapped[int | None] = mapped_column(Integer)
+    duration_min_high: Mapped[int | None] = mapped_column(Integer)
     tags: Mapped[list] = mapped_column(JSON, default=list)
+    has_geometry: Mapped[bool] = mapped_column(Boolean, default=False)
+    path: Mapped[list | None] = mapped_column(JSON)  # [[lat, lon], …] WGS84; PostGIS LineString in production
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("data_sources.id"))
     source_url: Mapped[str] = mapped_column(String(500))
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     verification_status: Mapped[str] = mapped_column(String(20), default="unverified")  # verified | unverified
@@ -75,7 +97,67 @@ class TrailRoute(Base):
     notices_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version: Mapped[int] = mapped_column(Integer, default=1)
 
+    source: Mapped[DataSource | None] = relationship()
     notices: Mapped[list[RouteNotice]] = relationship(back_populates="route", cascade="all, delete-orphan")
+    waypoints: Mapped[list[RouteWaypoint]] = relationship(back_populates="route", cascade="all, delete-orphan",
+                                                          order_by="RouteWaypoint.seq")
+    segments: Mapped[list[RouteSegment]] = relationship(back_populates="route", cascade="all, delete-orphan",
+                                                        order_by="RouteSegment.seq")
+
+    @property
+    def official_code(self) -> str:  # backwards-compatible alias
+        return self.course_no
+
+    @property
+    def estimated_duration_min(self) -> int | None:
+        if self.duration_min_low and self.duration_min_high:
+            return (self.duration_min_low + self.duration_min_high) // 2
+        return self.duration_min_low or self.duration_min_high
+
+
+class RouteWaypoint(Base):
+    __tablename__ = "route_waypoints"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    route_id: Mapped[str] = mapped_column(ForeignKey("trail_routes.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    code: Mapped[str] = mapped_column(String(10))  # e.g. 1S, 11, 1F
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(1))  # S | W | F
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    along_m: Mapped[float | None] = mapped_column(Float)  # position along route path
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("data_sources.id"))
+
+    route: Mapped[TrailRoute] = relationship(back_populates="waypoints")
+
+
+class RouteSegment(Base):
+    __tablename__ = "route_segments"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    route_id: Mapped[str] = mapped_column(ForeignKey("trail_routes.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    coords: Mapped[list] = mapped_column(JSON)  # [[lat, lon], …]
+    length_m: Mapped[float] = mapped_column(Float)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("data_sources.id"))
+
+    route: Mapped[TrailRoute] = relationship(back_populates="segments")
+
+
+class PoiPlace(Base):
+    __tablename__ = "poi_places"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    name: Mapped[str] = mapped_column(String(300))
+    category: Mapped[str] = mapped_column(String(40), index=True)  # cafe | food | rest | wifi | toilet …
+    address: Mapped[str | None] = mapped_column(String(500))
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    geo_precision: Mapped[str | None] = mapped_column(String(20))  # source | geocoded
+    open_status: Mapped[str | None] = mapped_column(String(40))  # as published, e.g. 영업/정상, 폐업
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("data_sources.id"))
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external_key: Mapped[str | None] = mapped_column(String(200), index=True)
+
+    source: Mapped[DataSource | None] = relationship()
 
 
 class RouteNotice(Base):
@@ -125,6 +207,8 @@ class DailySchedule(Base):
     trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
     date: Mapped[date] = mapped_column(Date)
     route_id: Mapped[str | None] = mapped_column(ForeignKey("trail_routes.id"))
+    # Additional same-day courses (Hayoung bundles such as 1+2), walked after route_id.
+    extra_route_ids: Mapped[list] = mapped_column(JSON, default=list)
     planned_start: Mapped[str | None] = mapped_column(String(5))  # HH:MM local (Asia/Seoul)
     planned_end: Mapped[str | None] = mapped_column(String(5))
     note: Mapped[str | None] = mapped_column(Text)
@@ -154,10 +238,30 @@ class TrackingSession(Base):
     last_point_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | paused | ended
     tracking_mode: Mapped[str] = mapped_column(String(10), default="gps")  # gps | manual
+    # Route-geometry progress (routes with has_geometry): furthest confirmed position along the path.
+    progress_m: Mapped[float | None] = mapped_column(Float)
+    off_route_m: Mapped[float | None] = mapped_column(Float)  # latest distance from path (good fixes only)
+    off_route_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     trip: Mapped[Trip] = relationship(back_populates="sessions")
     route: Mapped[TrailRoute | None] = relationship()
     points: Mapped[list[GpsPoint]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    visits: Mapped[list[WaypointVisit]] = relationship(back_populates="session", cascade="all, delete-orphan")
+
+
+class WaypointVisit(Base):
+    """Check-in log: the user came within the radius of a waypoint during a session."""
+
+    __tablename__ = "waypoint_visits"
+    __table_args__ = (UniqueConstraint("session_id", "waypoint_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("tracking_sessions.id", ondelete="CASCADE"), index=True)
+    waypoint_id: Mapped[str] = mapped_column(ForeignKey("route_waypoints.id", ondelete="CASCADE"))
+    arrived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    accuracy_m: Mapped[float | None] = mapped_column(Float)
+
+    session: Mapped[TrackingSession] = relationship(back_populates="visits")
+    waypoint: Mapped[RouteWaypoint] = relationship()
 
 
 class GpsPoint(Base):
@@ -184,6 +288,7 @@ class JournalEntry(Base):
     user_edited_text: Mapped[str | None] = mapped_column(Text)  # final, user-approved
     mood_tags: Mapped[list] = mapped_column(JSON, default=list)
     is_highlight: Mapped[bool] = mapped_column(Boolean, default=False)
+    waypoint_id: Mapped[str | None] = mapped_column(ForeignKey("route_waypoints.id", ondelete="SET NULL"))
     lat: Mapped[float | None] = mapped_column(Float)
     lon: Mapped[float | None] = mapped_column(Float)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -192,6 +297,7 @@ class JournalEntry(Base):
 
     trip: Mapped[Trip] = relationship(back_populates="journal_entries")
     media: Mapped[list[MediaAsset]] = relationship(back_populates="entry", cascade="all, delete-orphan")
+    waypoint: Mapped[RouteWaypoint | None] = relationship()
 
 
 class MediaAsset(Base):
