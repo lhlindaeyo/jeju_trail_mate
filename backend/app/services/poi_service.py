@@ -20,6 +20,8 @@ CATEGORY_ALIASES = {
     "food": ["food", "cafe"], "cafe": ["cafe"], "lodging": ["lodging"],
     "rest": ["rest", "wifi", "cafe"], "wifi": ["wifi"], "toilet": ["toilet"],
 }
+# Wi-Fi AP categories that are not places to rest (still available via category="wifi").
+NOT_REST = ("버스정류소", "전기차충전소", "공항", "터미널", "의료시설", "공공기관")
 CATEGORY_LABEL = {"food": "음식점", "cafe": "카페", "lodging": "숙박", "rest": "쉬어갈 곳", "wifi": "공공와이파이 장소", "toilet": "화장실"}
 
 
@@ -48,8 +50,11 @@ def find_places_near(db: Session, lat: float, lon: float, category: str = "food"
     rows = list(db.scalars(select(PoiPlace).where(
         PoiPlace.category.in_(cats), PoiPlace.lat.is_not(None),
         PoiPlace.lat.between(lat - dlat, lat + dlat), PoiPlace.lon.between(lon - dlon, lon + dlon))))
-    near = [(p, haversine_m(lat, lon, p.lat, p.lon)) for p in rows if not _closed(p.open_status)]
-    near = sorted([x for x in near if x[1] <= radius_m], key=lambda x: x[1])[:limit]
+    near = [(p, haversine_m(lat, lon, p.lat, p.lon)) for p in rows if not _closed(p.open_status)
+            and not (category == "rest" and p.detail and any(w in p.detail for w in NOT_REST))]
+    near = sorted([x for x in near if x[1] <= radius_m], key=lambda x: x[1])
+    seen_names: set[str] = set()
+    near = [x for x in near if not (x[0].name in seen_names or seen_names.add(x[0].name))][:limit]  # one entry per place name
     base = {"category": category, "category_label": CATEGORY_LABEL.get(category, category), "radius_m": radius_m,
             "caveat": "영업 여부·시간은 실시간 정보가 아닙니다. 방문 전 전화나 지도 앱으로 확인하세요."}
     if near:

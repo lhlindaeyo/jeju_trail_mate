@@ -95,18 +95,32 @@ def wifi_api(db: Session, *, appkey: str | None = None, dongs: list[str] | None 
     if not appkey:
         raise ImportError_("JEJU_DATAHUB_APPKEY가 없습니다. 제주데이터허브에서 데이터를 프로젝트에 담고 "
                            "마이페이지 > 프로젝트 관리의 프로젝트키를 backend/.env에 넣어 주세요.")
-    c = client or httpx.Client(timeout=15, headers=UA)
+    c = client or httpx.Client(timeout=30, headers=UA)
     now = datetime.now(timezone.utc)
     merged: dict[str, dict] = {}
     calls = 0
-    for dong in dongs or SEOGWIPO_DONGS:
+
+    def get(params: dict) -> dict:
+        nonlocal calls
+        resp = c.get(WIFI_API.format(appkey=appkey), params=params)
+        calls += 1
+        if resp.status_code != 200:
+            raise ImportError_(f"제주데이터허브 응답 {resp.status_code}: {resp.text[:200].replace(appkey, '<KEY>')}")
+        return resp.json()
+
+    # The API is a daily-snapshot history (millions of rows); one baseDate is the current
+    # inventory (~3,000 APs island-wide). Take the newest baseDate from the first row.
+    first = get({"number": 1, "limit": 1}).get("data", [])
+    base_date = first[0].get("baseDate") if first else None
+    if not base_date:
+        raise ImportError_("제주데이터허브 응답에 baseDate가 없습니다")
+    for dong in dongs or [None]:
         number = 1
         while True:
-            resp = c.get(WIFI_API.format(appkey=appkey), params={"number": number, "limit": 100, "addressDong": dong})
-            calls += 1
-            if resp.status_code != 200:
-                raise ImportError_(f"제주데이터허브 응답 {resp.status_code}: {resp.text[:200]}")
-            body = resp.json()
+            params = {"number": number, "limit": 100, "baseDate": base_date}
+            if dong:
+                params["addressDong"] = dong
+            body = get(params)
             for d in body.get("data", []):
                 name = (d.get("apGroupName") or "").strip()
                 try:
@@ -115,11 +129,12 @@ def wifi_api(db: Session, *, appkey: str | None = None, dongs: list[str] | None 
                     lat = lon = None
                 k = _key(name, d.get("addressDetail"))
                 m = merged.setdefault(k, {"name": name, "address": (d.get("addressDetail") or "").strip(),
-                                          "category": d.get("category"), "lats": [], "lons": [], "base": d.get("baseDate")})
-                if lat is not None:
+                                          "category": " · ".join(dict.fromkeys(x for x in (d.get("category"), d.get("categoryDetail")) if x)),
+                                          "lats": [], "lons": [], "base": d.get("baseDate")})
+                if lat is not None and 33.0 < lat < 34.0 and 126.0 < lon < 127.0:
                     m["lats"].append(lat)
                     m["lons"].append(lon)
-            if not body.get("hasMore"):
+            if not body.get("hasMore") or number > 200:
                 break
             number += 1
     places = [PoiPlace(name=m["name"], category="wifi", address=m["address"], detail=m["category"],
@@ -131,9 +146,11 @@ def wifi_api(db: Session, *, appkey: str | None = None, dongs: list[str] | None 
     if not dry_run:
         _replace(db, WIFI_SOURCE, places)
         src = register_api(db, WIFI_SOURCE, license=license, ref_date=ref)
-        src.note = f"제주데이터허브 OpenAPI 적재 ({', '.join(dongs or SEOGWIPO_DONGS)}). 좌표 = AP 설치 위치 평균."
+        scope = ", ".join(dongs) if dongs else "제주 전역"
+        src.note = f"제주데이터허브 OpenAPI 적재 ({scope}, 기준일 {base_date}). 좌표 = 같은 장소 AP 설치 위치의 평균."
         db.commit()
-    return {"calls": calls, "places": len(places), "with_coords": sum(1 for p in places if p.lat is not None), "ref_date": ref}
+    return {"calls": calls, "base_date": base_date, "places": len(places),
+            "with_coords": sum(1 for p in places if p.lat is not None), "ref_date": ref}
 
 
 def register_api(db: Session, source_id: str, *, license: str | None, ref_date: str | None):

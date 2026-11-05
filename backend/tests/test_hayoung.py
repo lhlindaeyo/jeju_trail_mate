@@ -75,6 +75,9 @@ def _wifi_transport(points: dict[str, list[float]]):
     """Fake 제주데이터허브 공공와이파이 API following the HWP guide's response shape."""
     def handler(request: httpx.Request) -> httpx.Response:
         assert "/api/proxy/Dtb18ta1btbD1Da1a81aaDttab6tDabb/test-key" in str(request.url)
+        if request.url.params.get("limit") == "1":  # newest-snapshot probe
+            return httpx.Response(200, json={"totCnt": 999, "hasMore": True, "data": [{"baseDate": "20260820"}]})
+        assert request.url.params.get("baseDate") == "20260820"
         data = [] if request.url.params.get("addressDong") != "서홍동" else [
             {"baseDate": "20260820", "macAddress": "x", "apGroupName": name, "installLocationDetail": "가로등",
              "category": "관광지", "categoryDetail": "관광지", "addressDong": "제주특별자치도 서귀포시 서홍동",
@@ -196,7 +199,7 @@ def hayoung_imported(client):
     assert r1["dropped_duplicate_parts"] == [3] and r1["repeated_parts"] == [1]  # dup removed, spur walked out and back
     assert r1["start"] == pytest.approx(list(ORIGIN), abs=1e-5)  # shared start of both courses = City Hall
     assert report["missing_courses"] == ["하영올레 3코스"]
-    assert wifi == {"calls": 2, "places": 4, "with_coords": 4, "ref_date": "20260820"}
+    assert wifi == {"calls": 3, "base_date": "20260820", "places": 4, "with_coords": 4, "ref_date": "20260820"}
     loc = located["routes"]["하영올레 1코스"]
     assert loc["located"] == 3 and loc["direction"] == "경유지 순서와 일치", loc
     return route_id(client, "1", "hayoung_olle")
@@ -225,13 +228,16 @@ def test_progress_checkin_and_off_route(client, auth, hayoung_imported):
     s = client.post("/v1/sessions", headers=auth, json={"trip_id": trip, "route_id": hayoung_imported}).json()
     sid = s["session_id"]
     t0 = datetime.now(timezone.utc)
-    out = client.post(f"/v1/sessions/{sid}/points", headers=auth, json={"points": _pts([0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3], t0)}).json()
+    # Two batches, each with a check-in: visits loaded from the DB (naive datetimes on SQLite)
+    # must sort together with new ones.
+    client.post(f"/v1/sessions/{sid}/points", headers=auth, json={"points": _pts([0, 0.05, 0.1], t0)})
+    out = client.post(f"/v1/sessions/{sid}/points", headers=auth, json={"points": _pts([0.15, 0.2, 0.25, 0.3], t0 + timedelta(minutes=3))}).json()
     summ = out["summary"]
     assert summ["progress_basis"] == "route_geometry" and 0.25 < summ["actual_progress"] < 0.31
     assert summ["visited_waypoints"] == ["서귀포시청제1청사", "법장사골목길", "걸매생태공원", "천지연폭포"]
     assert summ["next_waypoint"]["code"] == "14" and summ["next_waypoint"]["distance_m"] is None  # not located
-    arrivals = [n for n in out["notifications"] if n["event_type"] == "waypoint_arrival"]
-    assert [n["title"] for n in arrivals] == ["경유지 도착 · 법장사골목길", "경유지 도착 · 걸매생태공원", "경유지 도착 · 천지연폭포"]
+    arrivals = [n["title"] for n in client.get("/v1/notifications", headers=auth).json()["notifications"] if n["event_type"] == "waypoint_arrival"]
+    assert sorted(arrivals) == sorted(["경유지 도착 · 법장사골목길", "경유지 도착 · 걸매생태공원", "경유지 도착 · 천지연폭포"])
     assert "1F" not in str(summ)  # loop finish not triggered at the start
 
     # Poor accuracy far away: no deviation alert, no progress change.

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..agent.llm import LLMUnavailable, get_llm
 from ..agent.prompts import JOURNAL_SYSTEM, MEMO_POLISH_SYSTEM
 from ..models import JournalEntry, TrackingSession, Trip, UserPreferences
-from .geo import KST, to_kst
+from .geo import KST, as_utc, to_kst
 
 DRAFT_LABEL = "AI 초안 — 저장 전 확인·수정해 주세요."
 
@@ -35,7 +35,7 @@ def _session_line(s: TrackingSession) -> str:
 
 def passed_places(sessions: list[TrackingSession]) -> list[str]:
     """Waypoints actually checked in (fact log), in order — '지나온 곳'."""
-    visits = sorted((v for s in sessions for v in s.visits), key=lambda v: v.arrived_at)
+    visits = sorted((v for s in sessions for v in s.visits), key=lambda v: as_utc(v.arrived_at))
     return [v.waypoint.name for v in visits if v.waypoint.kind == "W"]
 
 

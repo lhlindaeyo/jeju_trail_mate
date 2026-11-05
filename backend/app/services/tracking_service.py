@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import GpsPoint, TrackingSession, WaypointVisit
-from .geo import KST, haversine_m, hhmm_to_minutes, project_on_path, valid_coordinate
+from .geo import KST, as_utc, haversine_m, hhmm_to_minutes, project_on_path, valid_coordinate
 
 MAX_WALKING_SPEED_MS = 4.0  # ~14 km/h — faster segments are treated as GPS jumps / vehicle
 RAW_POINT_RETENTION_DAYS = 30
@@ -137,9 +137,10 @@ def next_waypoint(s: TrackingSession) -> dict | None:
     if not route or not route.waypoints:
         return None
     visited = {v.waypoint_id for v in s.visits}
+    last_seq = max((v.waypoint.seq for v in s.visits if v.waypoint.kind == "W"), default=-1)
     done = s.progress_m or 0.0
     for w in route.waypoints:
-        if w.id in visited or w.kind == "S":
+        if w.id in visited or w.kind == "S" or w.seq < last_seq:
             continue
         if w.along_m is not None and w.along_m < done - MATCH_BACK_M:
             continue
@@ -189,7 +190,7 @@ def progress_summary(s: TrackingSession, schedule=None, now: datetime | None = N
         "expected_progress": round(expected_ratio, 3) if expected_ratio is not None else None,
         "progress_basis": prog["basis"],
         "next_waypoint": next_waypoint(s),
-        "visited_waypoints": [v.waypoint.name for v in sorted(s.visits, key=lambda v: v.arrived_at)],
+        "visited_waypoints": [v.waypoint.name for v in sorted(s.visits, key=lambda v: as_utc(v.arrived_at))],
         "off_route_m": round(s.off_route_m) if s.off_route_m is not None and route and route.has_geometry else None,
         "gps_quality": gps_quality,
         "gps_accuracy_m": round(acc) if acc is not None else None,

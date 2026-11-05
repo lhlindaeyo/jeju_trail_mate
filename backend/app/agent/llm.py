@@ -182,7 +182,14 @@ def _summarize(tool: str, out: Any) -> str:
             if not places:
                 return out.get("message") or "주변에서 확인된 장소가 없습니다."
             src = ", ".join(f"{s['name']}({s['ref_date'] or '기준일 미상'})" for s in out.get("sources", []))
-            return "\n".join(f"- {p['name']} ({p['distance_m']}m)" for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"
+
+            def line(p: dict) -> str:
+                where = f"{p['distance_m']}m" if p.get("distance_m") is not None else (p.get("address") or "주소 미상")
+                extra = f" · {p['detail'][:40]}" if p.get("detail") else ""
+                return f"- {p['name']} ({where}){extra}"
+
+            head = f"{out['message']}\n" if out.get("message") else ""
+            return head + "\n".join(line(p) for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"
         if tool == "get_next_waypoint" and out.get("next"):
             n = out["next"]
             dist = f" 약 {n['distance_m']}m 남았어요." if n.get("distance_m") is not None else ""

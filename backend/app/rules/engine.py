@@ -78,7 +78,7 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
                                 payload["caveat"], [ACT_NOTICE, ACT_LATER], {"url": payload["official_url"]}))
 
         # 1b) Waypoint check-ins (routes with located waypoints) → offer a photo/diary entry.
-        for v in sorted(session.visits, key=lambda v: v.arrived_at):
+        for v in sorted(session.visits, key=lambda v: as_utc(v.arrived_at)):
             w = v.waypoint
             if w.kind == "S":
                 continue
