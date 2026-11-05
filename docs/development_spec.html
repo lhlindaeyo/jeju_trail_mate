@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="JEJU TRAIL MATE 제주올레길 AI 트레킹 에이전트 제품 기획 및 개발 명세서">
+<title>JEJU TRAIL MATE | 제품 기획·개발 명세서</title>
+<style>
+:root{
+  --ink:#23352d;--muted:#68766e;--paper:#f7f6f1;--card:#fffefa;--line:#dce2d9;
+  --green:#315d49;--green2:#dce9df;--orange:#c66c45;--sand:#eee7d9;--blue:#e7eef1;
+  --shadow:0 10px 28px rgba(34,53,44,.07);--radius:18px
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;line-height:1.68}
+a{color:var(--green);overflow-wrap:anywhere}
+button{font:inherit}
+.hero{background:linear-gradient(135deg,#203b30,#47745b);color:#fff;padding:64px 24px 52px}
+.hero-inner,.layout{max-width:1180px;margin:auto}
+.eyebrow{font-size:.78rem;letter-spacing:.15em;font-weight:800;text-transform:uppercase;opacity:.8}
+h1{font-size:clamp(2.3rem,5vw,4.8rem);line-height:1.04;letter-spacing:-.045em;margin:18px 0}
+.hero p{font-size:1.12rem;max-width:760px;color:#e1ebe3}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+.pill{border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 12px;font-size:.84rem}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:28px;padding:28px 20px 80px}
+nav{position:sticky;top:18px;align-self:start;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;max-height:calc(100vh - 36px);overflow:auto;box-shadow:var(--shadow)}
+nav h2{font-size:.9rem;margin:0 0 12px}
+nav a{display:block;text-decoration:none;font-size:.86rem;padding:7px 8px;border-radius:8px;color:var(--muted)}
+nav a:hover{background:var(--green2);color:var(--ink)}
+main{min-width:0}
+section{margin:0 0 26px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(20px,3vw,34px);box-shadow:var(--shadow);scroll-margin-top:20px}
+h2{font-size:1.75rem;line-height:1.25;letter-spacing:-.025em;margin:0 0 18px}
+h3{font-size:1.13rem;margin:25px 0 10px}
+h4{margin:0 0 6px}
+p{margin:8px 0 13px}
+.lead{font-size:1.05rem;color:#44574b}
+.small,.note{font-size:.88rem;color:var(--muted)}
+.note{padding:13px 15px;background:#f2f3ed;border-left:4px solid var(--green);border-radius:8px}
+.warning{padding:13px 15px;background:#fff3e8;border-left:4px solid var(--orange);border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:17px}
+.card h3,.card h4{margin-top:0}
+.metric{font-size:1.9rem;font-weight:800;line-height:1.2;color:var(--green)}
+.label{font-size:.82rem;color:var(--muted)}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:10px 11px}
+th{background:#eef2eb;font-weight:750}
+tr:last-child td{border-bottom:0}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+code{background:#eef1eb;padding:2px 5px;border-radius:5px;font-size:.9em}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#20342b;color:#eaf0e9;padding:17px;border-radius:12px;font-size:.85rem;line-height:1.55}
+ul,ol{padding-left:1.25rem}
+li{margin:.35rem 0}
+.flow{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.flowbox{border:1px solid var(--line);background:#fff;border-radius:12px;padding:13px 15px}
+.arrow{text-align:center;color:var(--green);font-weight:900;line-height:1}
+.tag{display:inline-block;border-radius:999px;background:var(--green2);color:#274d39;padding:3px 9px;font-size:.76rem;font-weight:800}
+.tag.orange{background:#fae8dc;color:#8b492c}
+.tag.blue{background:var(--blue);color:#375766}
+.timeline{border-left:2px solid #cbd9cd;margin-left:7px;padding-left:20px}
+.timeline-item{position:relative;margin:0 0 20px}
+.timeline-item:before{content:"";position:absolute;left:-27px;top:7px;width:10px;height:10px;border-radius:50%;background:var(--green);border:3px solid var(--green2)}
+.checklist label{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.checklist input{margin-top:7px;accent-color:var(--green);flex:0 0 auto}
+.checklist label:has(input:checked) span{text-decoration:line-through;color:#879087}
+.progress{height:8px;background:#e5e9e2;border-radius:99px;overflow:hidden;margin:8px 0 14px}
+.progressbar{height:100%;width:0;background:var(--green);transition:width .2s}
+details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0;background:#fff}
+summary{font-weight:750;cursor:pointer}
+footer{max-width:1180px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:.86rem}
+.btn{display:inline-block;border:0;background:var(--green);color:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;text-decoration:none}
+.btn.secondary{background:#e6ece5;color:var(--ink)}
+@media(max-width:900px){.layout{grid-template-columns:1fr}nav{position:static;max-height:none}.grid.three{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.hero{padding:44px 20px}.layout{padding:16px 12px 50px}.grid,.grid.three{grid-template-columns:1fr}section{padding:20px}table{display:block;overflow-x:auto;white-space:normal}h2{font-size:1.5rem}}
+@media print{body{background:#fff}.hero{padding:28px}.layout{display:block;padding:0}.layout nav{display:none}section{box-shadow:none;break-inside:avoid;margin:12px 0;border:1px solid #bbb}footer{padding:0}.btn{display:none}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Product Requirements · Technical Design · MVP Roadmap</div>
+    <h1>JEJU<br>TRAIL MATE</h1>
+    <p>제주를 걷는 동안에는 믿음직한 AI 동행자, 여행이 끝난 후에는 나만의 이야기를 담은 디지털 일기책.</p>
+    <div class="hero-meta">
+      <span class="pill">Mobile-first · PWA 우선 검토</span>
+      <span class="pill">AI Agent + GPS + Journal</span>
+      <span class="pill">기준일: 2026-11-04</span>
+      <span class="pill">기획·개발 통합 명세서 v1.0</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<nav aria-label="목차">
+  <h2>문서 목차</h2>
+  <a href="#overview">01. 제품 개요</a>
+  <a href="#official">02. 공식 제주올레 사이트 기반</a>
+  <a href="#personas">03. 타깃과 문제 정의</a>
+  <a href="#journey">04. 핵심 사용자 여정</a>
+  <a href="#features">05. 기능 명세</a>
+  <a href="#screens">06. 화면 및 UX</a>
+  <a href="#agent">07. AI Agent 설계</a>
+  <a href="#architecture">08. 기술 아키텍처</a>
+  <a href="#data">09. 데이터베이스 설계</a>
+  <a href="#apis">10. API 및 외부 데이터</a>
+  <a href="#notifications">11. 능동 알림 로직</a>
+  <a href="#journal">12. 일기 및 디지털 책</a>
+  <a href="#security">13. 보안·개인정보·안전</a>
+  <a href="#mvp">14. MVP 범위와 우선순위</a>
+  <a href="#roadmap">15. 개발 로드맵</a>
+  <a href="#testing">16. 테스트·성공 지표</a>
+  <a href="#risks">17. 리스크와 대응</a>
+  <a href="#launch">18. 출시 체크리스트</a>
+  <a href="#sources">19. 출처와 가정</a>
+</nav>
+
+<main>
+<section id="overview">
+  <h2>01. 제품 개요</h2>
+  <p class="lead"><strong>JEJU TRAIL MATE</strong>는 제주올레길을 걷는 개별 여행자를 위해 계획·이동·현장 대응·기록·완주 기념책 제작을 하나로 연결하는 개인화 AI 트레킹 에이전트다.</p>
+  <div class="grid three">
+    <div class="card"><div class="metric">PLAN</div><h3>여행 전</h3><p>여행 기간, 체력, 선호도, 귀환 시각을 반영해 여러 코스의 일정을 계획한다.</p></div>
+    <div class="card"><div class="metric">WALK</div><h3>여행 중</h3><p>위치·진행률·날씨·일정을 결합해 유용한 순간에 먼저 안내한다.</p></div>
+    <div class="card"><div class="metric">REMEMBER</div><h3>여행 후</h3><p>사진·음성·텍스트 기록을 정리해 하루 일기와 완주 디지털 책을 만든다.</p></div>
+  </div>
+  <h3>제품 원칙</h3>
+  <ul>
+    <li><strong>사용자 주도권:</strong> AI는 추천·초안을 제안하고, 일정 변경·공유·삭제는 사용자가 승인한다.</li>
+    <li><strong>검증된 정보:</strong> 코스·우회·운영 정보는 출처와 갱신 시각을 함께 표시한다.</li>
+    <li><strong>걷기에 방해되지 않기:</strong> 알림은 최소화하고 음성 입력과 한 손 조작을 지원한다.</li>
+    <li><strong>기록의 진정성:</strong> AI는 사용자가 말하지 않은 사건·감정을 지어내지 않는다.</li>
+    <li><strong>오프라인 대비:</strong> 네트워크가 끊겨도 저장된 일정·기록·기본 코스 정보에 접근할 수 있게 한다.</li>
+  </ul>
+  <div class="note"><strong>제품 포지셔닝:</strong> 단순 지도 앱이나 관광 챗봇이 아니라, 개인의 여행을 관리하고 그 경험을 기억 가능한 결과물로 완성하는 AI 동행자.</div>
+</section>
+
+<section id="official">
+  <h2>02. 공식 제주올레 사이트 기반 설계</h2>
+  <p>기준 사이트: <a href="https://www.jejuolle.org/trail#/" target="_blank" rel="noopener">제주올레 트레일 공식 페이지</a></p>
+  <div class="grid">
+    <div class="card"><div class="metric">437km</div><div class="label">공식 사이트가 안내하는 전체 길이</div></div>
+    <div class="card"><div class="metric">27개</div><div class="label">공식 사이트가 안내하는 코스 수</div></div>
+  </div>
+  <p>공식 페이지는 코스별 이름, 난이도, 거리, 예상 소요 시간과 함께 긴급 알림 및 코스 변경·우회 공지를 제공한다. 이러한 정보는 코스 탐색과 안전 안내의 출발점으로 삼는다.</p>
+  <h3>공식 사이트와의 연동 원칙</h3>
+  <table>
+    <thead><tr><th>데이터</th><th>제품 활용</th><th>구현 원칙</th></tr></thead>
+    <tbody>
+      <tr><td>코스 이름·번호</td><td>코스 검색, 일정 구성</td><td>공식 제공 자료 또는 사용 허가를 받은 데이터로 관리</td></tr>
+      <tr><td>거리·난이도·예상 시간</td><td>개인화 추천 및 일정 추정</td><td>수집 날짜와 원본 출처를 저장하고 변경을 감지</td></tr>
+      <tr><td>코스 GPX·경로 좌표</td><td>지도 표시, 진행률 계산</td><td>공식 다운로드/API 제공 여부와 라이선스를 먼저 확인</td></tr>
+      <tr><td>긴급 알림·우회 공지</td><td>트레킹 중 안전 알림</td><td>공식 공지의 최신성을 확인하고, 확인 불가 시 최신 정보로 단정하지 않음</td></tr>
+      <tr><td>스탬프·완주 정보</td><td>완주 기록 및 기념책</td><td>공식 인증과 앱 자체 기록을 명확히 구분</td></tr>
+    </tbody>
+  </table>
+  <div class="warning"><strong>중요한 데이터·권리 확인:</strong> 웹페이지에 보이는 정보라고 해서 자동 수집·재배포·상업적 이용이 허용되는 것은 아니다. 공식 기관에 데이터/API·지도·GPX·상표·사진 사용 조건을 확인한다. 웹 스크래핑을 기본 전제로 삼지 말고, 허가된 데이터 제공 방식 또는 수동 관리가 가능한 초기 데이터셋으로 시작한다.</div>
+  <h3>데이터 갱신 전략</h3>
+  <ol>
+    <li>코스 메타데이터는 관리자 검토 후 버전 관리한다.</li>
+    <li>우회·통제 공지는 가능하면 공식 피드/API를 이용한다. 제공되지 않으면 관리자 확인·수동 등록 절차를 둔다.</li>
+    <li>각 데이터 항목에 <code>source_url</code>, <code>checked_at</code>, <code>valid_from</code>, <code>valid_until</code>을 기록한다.</li>
+    <li>오래되었거나 확인되지 않은 정보에는 “최신 확인 필요” 배지를 표시한다.</li>
+  </ol>
+</section>
+
+<section id="personas">
+  <h2>03. 타깃 고객과 문제 정의</h2>
+  <div class="grid">
+    <div class="card"><span class="tag">Primary</span><h3>여러 코스를 걷는 개별 여행자</h3><p>일정을 직접 짜야 하고, 걷는 중 교통·식사·휴식·귀환까지 판단해야 한다.</p></div>
+    <div class="card"><span class="tag">Secondary</span><h3>혼자 걷는 여행자</h3><p>안전과 귀환 계획이 중요하며, 경험과 감정을 기록으로 남기고 싶어 한다.</p></div>
+    <div class="card"><span class="tag">Secondary</span><h3>감성·사진 중심 여행자</h3><p>사진은 많이 찍지만 일기를 미루기 쉽고, 여행 후 기록을 정리하기 어렵다.</p></div>
+    <div class="card"><span class="tag">Future</span><h3>외국인 올레길 여행자</h3><p>다국어 안내, 교통 정보, 쉬운 코스 설명이 필요하다.</p></div>
+  </div>
+  <h3>핵심 사용자 문제</h3>
+  <table><thead><tr><th>문제</th><th>제품의 해결</th><th>측정할 지표</th></tr></thead>
+  <tbody>
+    <tr><td>여러 사이트를 오가며 일정 조사</td><td>코스·시간·선호도를 통합한 일정 초안</td><td>계획 완성 시간, 추천 채택률</td></tr>
+    <tr><td>날씨나 속도 변화에 대응하기 어려움</td><td>상황 감지 후 대안 제안</td><td>알림 유용성, 일정 조정 성공률</td></tr>
+    <tr><td>걷는 중 휴대폰 조작 부담</td><td>음성 입력, 요약형 알림, 큰 버튼</td><td>기록 작성 시간, 알림 무시율</td></tr>
+    <tr><td>여행 감정과 순간을 잊어버림</td><td>음성·사진으로 즉시 메모</td><td>일기 기록 일수, 저장률</td></tr>
+    <tr><td>완주 후 기록을 정리하지 못함</td><td>AI 편집 가능한 디지털 여행책</td><td>책 생성률, 만족도, 공유·다운로드</td></tr>
+  </tbody></table>
+</section>
+
+<section id="journey">
+  <h2>04. 핵심 사용자 여정</h2>
+  <div class="timeline">
+    <div class="timeline-item"><h3>1. 여행 시작 전 — 여행 프로필과 일정</h3><p>사용자는 날짜, 숙박 위치, 하루 최대 거리, 걷기 종료 시각, 풍경·카페·문화 선호, 이동 수단을 입력한다. AI는 코스 조합과 이동 일정을 제안하며, 사용자가 승인한 일정만 확정한다.</p><p class="small">완료 기준: 일정에 날짜별 코스, 예상 시간, 시작·종료 지점, 이동·숙박 확인 필요 항목이 들어간다.</p></div>
+    <div class="timeline-item"><h3>2. 출발 전 — 오늘의 브리핑</h3><p>오늘의 코스, 예상 거리와 시간, 날씨 출처·갱신 시각, 준비물, 공식 우회 공지 확인 여부를 보여준다. 정보가 불확실하면 명확히 표시한다.</p></div>
+    <div class="timeline-item"><h3>3. 걷는 중 — 실시간 상황 지원</h3><p>사용자가 트레킹 세션을 시작하면 GPS를 기록한다. 계획보다 늦어짐, 장시간 이동, 공식 우회 공지, 일몰 임박 등 유용한 조건에서만 알림을 생성한다.</p></div>
+    <div class="timeline-item"><h3>4. 순간 기록 — 음성·사진·텍스트</h3><p>사용자는 “오늘 바다가 정말 예뻤어”라고 말하거나 사진을 저장한다. 앱은 시간·위치와 연결하고 AI 일기 초안을 만든다. 사용자가 수정·저장한다.</p></div>
+    <div class="timeline-item"><h3>5. 하루 종료 — 일기 확인</h3><p>하루 이동 요약, 사진, 음성 메모, 방문 장소를 모아 일기 초안을 생성한다. AI가 추측한 내용은 추가하지 않고, 위치 기록 누락은 추정 사실처럼 쓰지 않는다.</p></div>
+    <div class="timeline-item"><h3>6. 여행 완료 — 디지털 일기책</h3><p>사용자는 표지 제목, 대표 사진, 책 스타일을 선택한다. AI는 프롤로그·날짜별 기록·여정 지도·통계·에필로그를 구성하고 PDF를 생성한다. 사용자가 미리 보고 최종 승인한다.</p></div>
+  </div>
+</section>
+
+<section id="features">
+  <h2>05. 기능 명세</h2>
+  <h3>P0 — MVP 필수 기능</h3>
+  <table><thead><tr><th>ID</th><th>기능</th><th>상세 요구사항</th><th>수용 기준</th></tr></thead><tbody>
+    <tr><td>F-01</td><td>프로필·선호 설정</td><td>여행 날짜, 하루 거리, 종료 시각, 걷기 속도 초기값, 관심사, 알림 선호</td><td>사용자가 언제든 수정·삭제 가능</td></tr>
+    <tr><td>F-02</td><td>코스 탐색</td><td>공식 코스 데이터, 거리, 난이도, 예상 시간, 공지 링크 표시</td><td>출처와 최종 확인일 표시</td></tr>
+    <tr><td>F-03</td><td>개인화 일정</td><td>여러 날짜에 코스 배정, 일정 변경 시 영향받는 날짜 재계산</td><td>사용자 승인 전 확정 일정 변경 금지</td></tr>
+    <tr><td>F-04</td><td>트레킹 세션·GPS</td><td>시작/일시정지/재개/종료, 이동 기록, 거리와 시간 요약</td><td>권한 거부 시 수동 기록으로 진행 가능</td></tr>
+    <tr><td>F-05</td><td>AI 동행자</td><td>코스·일정·기록·주변 장소 질문, 허용된 도구 호출</td><td>확인되지 않은 장소·교통편을 사실처럼 말하지 않음</td></tr>
+    <tr><td>F-06</td><td>능동 알림</td><td>일정 지연, 사용자 설정 휴식 알림, 날씨/우회 공지 이벤트</td><td>중복 억제, 알림 끄기, 알림 이력 제공</td></tr>
+    <tr><td>F-07</td><td>일기 작성</td><td>텍스트·음성 전사·사진 첨부, 위치·시간 연결</td><td>AI 초안은 편집 후 저장 가능</td></tr>
+    <tr><td>F-08</td><td>하루 요약</td><td>사용자 기록을 바탕으로 하루 일기와 하이라이트 생성</td><td>근거 없는 사건·감정 생성 금지</td></tr>
+    <tr><td>F-09</td><td>완주 디지털 책</td><td>표지, 목차, 날짜별 기록, 지도/통계, 사진, PDF 내보내기</td><td>미리보기·수정·삭제·다운로드 가능</td></tr>
+  </tbody></table>
+  <h3>P1 — 다음 단계</h3>
+  <ul><li>오프라인 지도·경로 패키지와 동기화 충돌 해결</li><li>다국어 UI 및 음성 기록</li><li>개인별 걷기 속도 학습과 더 정교한 일정 재계산</li><li>사진 분류와 중복 사진 선택 보조</li><li>책 테마 추가, 공유 링크, 실물 포토북 연계</li></ul>
+  <h3>P2 — 장기 확장</h3>
+  <ul><li>웨어러블 연동(명시적 동의가 있는 경우)</li><li>친구·가족과 위치 공유(사용자가 직접 켜는 선택 기능)</li><li>로컬 파트너 제휴, 예약 연동</li><li>한라산·오름 등 다른 트레킹 유형 확장</li></ul>
+</section>
+
+<section id="screens">
+  <h2>06. 화면 및 UX 명세</h2>
+  <table><thead><tr><th>화면</th><th>필수 요소</th><th>주요 동작</th></tr></thead><tbody>
+    <tr><td>온보딩</td><td>서비스 설명, 권한 목적, 개인정보 선택</td><td>위치·알림·마이크 권한은 필요한 순간에 요청</td></tr>
+    <tr><td>Home</td><td>오늘 일정, 진행 중 세션, 날씨 출처, AI 제안, 일기 미작성 표시</td><td>트레킹 시작, AI에게 질문</td></tr>
+    <tr><td>Plan</td><td>날짜별 코스, 이동시간, 거리, 숙박 메모, 제약 조건</td><td>일정 생성·드래그 변경·재계산·승인</td></tr>
+    <tr><td>Map</td><td>현재 위치, 경로, 시작·종료 지점, 저장된 POI, 위치 정확도</td><td>세션 시작/일시정지, 지도 중심 이동</td></tr>
+    <tr><td>AI Companion</td><td>대화, 빠른 질문, 출처/갱신 시각, 행동 제안 카드</td><td>장소 검색·일정 변경 제안·일기 초안 생성</td></tr>
+    <tr><td>Journal</td><td>날짜별 기록, 음성 녹음, 사진, 텍스트 편집</td><td>전사·초안 생성·저장·삭제</td></tr>
+    <tr><td>Journey Book</td><td>표지·스타일·목차·페이지 미리보기</td><td>재생성, 페이지 제외, PDF 내보내기</td></tr>
+    <tr><td>Settings</td><td>권한, 알림 빈도, 데이터 내보내기/삭제, AI 처리 동의</td><td>동의 철회와 계정 삭제 요청</td></tr>
+  </tbody></table>
+  <h3>모바일 UX 규칙</h3>
+  <ul><li>걷는 중 핵심 버튼은 크고 간결하게 배치하며, 긴 텍스트 입력을 요구하지 않는다.</li><li>알림 문구는 짧게 쓰고, “지도 보기”, “일정 다시 계산”, “나중에”처럼 선택지를 명확히 제공한다.</li><li>이동 중 화면을 오래 보게 만드는 UI를 피하고, 음성 기능은 사용자가 직접 시작한다.</li><li>색상만으로 상태를 전달하지 않고 텍스트·아이콘을 함께 쓴다.</li><li>네트워크 오류, 위치 권한 거부, GPS 정확도 낮음 상태를 명확하게 안내한다.</li></ul>
+</section>
+
+<section id="agent">
+  <h2>07. AI Agent 설계</h2>
+  <p class="lead">초기 버전은 여러 LLM 에이전트가 서로 대화하는 구조보다, 하나의 오케스트레이터가 도구를 선택하는 구조로 만든다. 시간·거리·경로 계산은 코드로 처리하고 LLM은 의도 파악, 설명, 초안 생성에 집중한다.</p>
+  <div class="flow">
+    <div class="flowbox"><strong>1. Input</strong><br>사용자 메시지, 현재 일정, 세션 상태, 사용자가 허용한 위치·날씨 정보</div>
+    <div class="arrow">↓</div>
+    <div class="flowbox"><strong>2. Context Builder</strong><br>필요한 최소 데이터만 조회: 선호, 오늘 일정, 최근 이동 요약, 관련 공지</div>
+    <div class="arrow">↓</div>
+    <div class="flowbox"><strong>3. Intent & Policy</strong><br>일정 질문 / 장소 검색 / 안전 관련 질문 / 일기 / 완주 책 / 일반 대화 분류</div>
+    <div class="arrow">↓</div>
+    <div class="flowbox"><strong>4. Tool Router</strong><br>RouteService · WeatherService · POIService · ScheduleService · JournalService · BookService</div>
+    <div class="arrow">↓</div>
+    <div class="flowbox"><strong>5. Verified Result</strong><br>외부 데이터 출처·시간·신뢰 상태 확인, 필요 시 결과 부족을 명시</div>
+    <div class="arrow">↓</div>
+    <div class="flowbox"><strong>6. Response / Approval</strong><br>짧은 답변과 선택지를 제공. 일정 변경·공유·삭제 등은 사용자 확인 후 실행</div>
+  </div>
+  <h3>도구 인터페이스(예시)</h3>
+  <pre>get_route(route_id)
+get_route_notices(route_id, checked_after)
+get_weather(lat, lon, time_range)
+get_nearby_places(lat, lon, category, open_status)
+estimate_arrival(route_progress, walking_pace, break_plan)
+propose_schedule_change(trip_id, constraints)
+create_journal_draft(entry_ids, user_style)
+generate_journey_book(trip_id, selected_entries, theme)</pre>
+  <h3>LLM이 하면 안 되는 일</h3>
+  <ul><li>존재 여부를 확인하지 않은 식당·쉼터·버스 시간을 만들어내기</li><li>공식 코스 통제 상태를 실시간 확인 없이 단정하기</li><li>사용자 동의 없이 일정·예약·공유 설정을 변경하기</li><li>일기에서 사용자가 말하지 않은 감정·사건·대화를 사실처럼 쓰기</li><li>위치·활동 데이터만으로 의료적 진단이나 안전 보장을 하기</li></ul>
+  <h3>개인화 메모리</h3>
+  <p>사용자가 저장에 동의한 선호(선호 거리, 풍경, 휴식 빈도, 문체 등)만 장기 프로필에 저장한다. 임시 GPS는 필요한 기간만 보유하고, 원시 위치 기록을 LLM에 매번 통째로 보내지 않는다. 개인화 기억을 열람·수정·삭제할 수 있는 설정을 제공한다.</p>
+</section>
+
+<section id="architecture">
+  <h2>08. 기술 아키텍처</h2>
+  <div class="flow">
+    <div class="flowbox"><strong>Mobile client</strong><br>React Native + Expo 또는 PWA 프로토타입<br><span class="small">Map · GPS session · Camera · Voice · Local cache · Push</span></div>
+    <div class="arrow">↕ HTTPS / Push</div>
+    <div class="flowbox"><strong>Backend API — Python FastAPI</strong><br>인증·권한 확인, 비즈니스 규칙, 일정/기록 CRUD, 외부 API 프록시</div>
+    <div class="arrow">↕</div>
+    <div class="grid">
+      <div class="flowbox"><strong>AI Orchestrator</strong><br>LLM tool calling, prompt templates, output validation</div>
+      <div class="flowbox"><strong>Event / Rules Engine</strong><br>일정 지연·공지·휴식 이벤트, 중복 알림 억제</div>
+      <div class="flowbox"><strong>PostgreSQL + PostGIS</strong><br>프로필·여행·코스·위치 요약·일기 메타데이터</div>
+      <div class="flowbox"><strong>Object Storage</strong><br>사진·음성·PDF, 접근 제어 및 만료 정책</div>
+    </div>
+    <div class="arrow">↕</div>
+    <div class="flowbox"><strong>External providers</strong><br>공식 제주올레 데이터/공지 · 지도 SDK/API · 기상청 · 관광/POI · STT · Push provider</div>
+  </div>
+  <h3>추천 기술 스택</h3>
+  <table><thead><tr><th>영역</th><th>권장 선택</th><th>메모</th></tr></thead><tbody>
+    <tr><td>모바일</td><td>React Native + Expo</td><td>실제 백그라운드 GPS·알림 요구를 검증한다. 브라우저 PWA는 OS별 제약을 먼저 확인한다.</td></tr>
+    <tr><td>백엔드</td><td>Python + FastAPI</td><td>API, AI 도구 호출, 일정 계산, 이벤트 규칙</td></tr>
+    <tr><td>DB</td><td>PostgreSQL + PostGIS</td><td>공간 검색, 코스와 위치 데이터</td></tr>
+    <tr><td>인증·스토리지</td><td>Supabase Auth/Storage 또는 동등 서비스</td><td>접근 정책, 비공개 파일, 삭제 흐름 검증</td></tr>
+    <tr><td>AI</td><td>LLM API + STT</td><td>제공사 종속성을 줄이기 위해 내부 인터페이스로 감싼다.</td></tr>
+    <tr><td>지도</td><td>카카오맵·네이버 지도 등 후보 평가</td><td>도보 경로, SDK 약관, 오프라인 지원, 비용을 비교 후 선정</td></tr>
+    <tr><td>푸시</td><td>FCM / APNs</td><td>권한·토큰 만료·중복 알림·재시도 처리</td></tr>
+    <tr><td>PDF</td><td>HTML 템플릿 → PDF 렌더링</td><td>한글 폰트, 페이지 나눔, 이미지 저작권·해상도 확인</td></tr>
+  </tbody></table>
+  <div class="note">구현 순서 권장: 먼저 모바일 웹 프로토타입으로 사용자 흐름과 일기책을 검증한 뒤, GPS 백그라운드 실행이 필요한 현장 테스트 단계에서 네이티브 앱을 확정한다. 웹 앱이 OS 종료 상태에서도 안정적인 GPS 추적을 제공한다고 가정하지 않는다.</div>
+</section>
+
+<section id="data">
+  <h2>09. 데이터베이스 설계</h2>
+  <p>초기에는 관계형 데이터 모델을 사용한다. GPS 원시 로그는 크기가 커질 수 있으므로 별도 보관 정책과 요약 테이블을 둔다.</p>
+  <table><thead><tr><th>테이블</th><th>주요 필드</th><th>설명</th></tr></thead><tbody>
+    <tr><td><code>users</code></td><td>id, email/provider_id, created_at, locale</td><td>계정 기본 정보</td></tr>
+    <tr><td><code>user_preferences</code></td><td>user_id, daily_distance_target, pace_estimate, interests, notification_settings</td><td>개인화 선호 및 알림 설정</td></tr>
+    <tr><td><code>trail_routes</code></td><td>id, official_code, name, distance_km, difficulty, estimated_duration, source_url, checked_at, version</td><td>검증된 코스 메타데이터</td></tr>
+    <tr><td><code>route_notices</code></td><td>id, route_id, title, notice_type, source_url, published_at, valid_until, verified_at, status</td><td>우회·통제·안전 공지</td></tr>
+    <tr><td><code>trips</code></td><td>id, user_id, start_date, end_date, status, title, consent_flags</td><td>여행 프로젝트</td></tr>
+    <tr><td><code>daily_schedules</code></td><td>id, trip_id, date, route_id, planned_start, planned_end, user_approved_at, revision</td><td>날짜별 일정 버전</td></tr>
+    <tr><td><code>tracking_sessions</code></td><td>id, trip_id, route_id, started_at, paused_at, ended_at, distance_m, status</td><td>트레킹 세션</td></tr>
+    <tr><td><code>gps_points</code></td><td>session_id, timestamp, lat, lon, accuracy_m, source</td><td>동의된 위치 로그; 최소 보유 원칙 적용</td></tr>
+    <tr><td><code>journal_entries</code></td><td>id, trip_id, date, text, ai_draft, user_edited_text, mood_tags, visibility</td><td>일기 및 편집 이력</td></tr>
+    <tr><td><code>media_assets</code></td><td>id, entry_id, storage_key, media_type, captured_at, lat/lon nullable, consent_state</td><td>사진·음성 파일 참조</td></tr>
+    <tr><td><code>notifications</code></td><td>id, user_id, event_key, severity, message, created_at, delivered_at, action_taken</td><td>알림 이력과 중복 방지</td></tr>
+    <tr><td><code>journey_books</code></td><td>id, trip_id, theme, status, storage_key, generated_at, approved_at</td><td>책 생성 작업 및 최종 파일</td></tr>
+    <tr><td><code>audit_events</code></td><td>id, user_id, event_type, resource_type, created_at</td><td>보안·중요 변경 이력; 민감 내용 최소화</td></tr>
+  </tbody></table>
+  <h3>데이터 관계</h3>
+  <pre>users 1 ── N trips
+trips 1 ── N daily_schedules
+trips 1 ── N tracking_sessions
+tracking_sessions 1 ── N gps_points
+trips 1 ── N journal_entries
+journal_entries 1 ── N media_assets
+trips 1 ── N journey_books
+trail_routes 1 ── N daily_schedules
+trail_routes 1 ── N route_notices</pre>
+  <h3>데이터 규칙</h3>
+  <ul><li>모든 사용자 소유 데이터에 사용자/여행 소유권을 검증한다.</li><li>위치 좌표는 위도·경도 유효성, 정확도, 타임스탬프를 확인한다.</li><li>일정 변경은 revision을 올려 이전 승인 상태를 감사 가능하게 한다.</li><li>사진/음성 파일은 공개 버킷에 저장하지 않는다.</li><li>삭제 요청 시 DB 레코드, 미디어, 생성된 PDF, 백업 만료 정책을 함께 처리한다.</li></ul>
+</section>
+
+<section id="apis">
+  <h2>10. API 및 외부 데이터 설계</h2>
+  <h3>내부 API 초안</h3>
+  <table><thead><tr><th>Method</th><th>Endpoint</th><th>목적</th></tr></thead><tbody>
+    <tr><td>GET</td><td><code>/v1/routes</code></td><td>코스 검색·필터</td></tr>
+    <tr><td>GET</td><td><code>/v1/routes/{id}</code></td><td>코스 상세 및 최신 확인 정보</td></tr>
+    <tr><td>GET</td><td><code>/v1/routes/{id}/notices</code></td><td>관련 공지 조회</td></tr>
+    <tr><td>POST</td><td><code>/v1/trips</code></td><td>여행 생성</td></tr>
+    <tr><td>POST</td><td><code>/v1/trips/{id}/plan</code></td><td>일정 초안 생성</td></tr>
+    <tr><td>POST</td><td><code>/v1/trips/{id}/plan/approve</code></td><td>사용자 일정 승인</td></tr>
+    <tr><td>POST</td><td><code>/v1/sessions</code></td><td>트레킹 세션 시작</td></tr>
+    <tr><td>POST</td><td><code>/v1/sessions/{id}/points</code></td><td>GPS 배치 업로드</td></tr>
+    <tr><td>POST</td><td><code>/v1/journals</code></td><td>일기/메모 생성</td></tr>
+    <tr><td>POST</td><td><code>/v1/journals/{id}/draft</code></td><td>AI 일기 초안 생성</td></tr>
+    <tr><td>POST</td><td><code>/v1/trips/{id}/book</code></td><td>디지털 책 생성 작업</td></tr>
+    <tr><td>GET</td><td><code>/v1/books/{id}</code></td><td>책 생성 상태 및 다운로드 권한 확인</td></tr>
+    <tr><td>DELETE</td><td><code>/v1/account/data</code></td><td>사용자 데이터 삭제 절차 시작</td></tr>
+  </tbody></table>
+  <p class="small">이 경로들은 설계 예시이며 실제 구현 시 API 버전, 인증, 요청/응답 스키마, rate limit, 오류 코드, idempotency를 정의해야 한다.</p>
+  <h3>외부 제공자 검토</h3>
+  <table><thead><tr><th>데이터</th><th>후보</th><th>검토 항목</th></tr></thead><tbody>
+    <tr><td>올레길 코스·공지</td><td><a href="https://www.jejuolle.org/trail#/" target="_blank" rel="noopener">제주올레 공식 사이트</a></td><td>API/파일 제공, 상업적 이용, 재배포, 갱신 주기</td></tr>
+    <tr><td>지도·경로</td><td>카카오맵, 네이버 지도 등</td><td>도보 경로 지원, 경로/타일 저장 허용 여부, 쿼터, 비용</td></tr>
+    <tr><td>날씨</td><td><a href="https://www.data.go.kr/" target="_blank" rel="noopener">공공데이터포털·기상청 제공 데이터</a></td><td>예보 종류, 좌표 변환, 호출 한도, 갱신 시각</td></tr>
+    <tr><td>관광·POI</td><td>한국관광공사·지역 제공 데이터</td><td>영업시간 최신성, 좌표 품질, 이용 조건</td></tr>
+    <tr><td>음성 전사</td><td>STT API 또는 자체 처리</td><td>한국어 인식률, 비용, 음성 보관·학습 정책</td></tr>
+    <tr><td>푸시</td><td>FCM / APNs</td><td>토큰 수명, 플랫폼 권한, 재시도·중복 방지</td></tr>
+  </tbody></table>
+  <div class="warning">실제 예약·영업 중 여부·버스 도착 정보를 연동하지 않았다면 실시간 확인된 것처럼 표시하지 않는다. API를 통해 검증되지 않은 정보는 “외부 링크에서 확인”으로 안내한다.</div>
+</section>
+
+<section id="notifications">
+  <h2>11. 능동 알림 엔진</h2>
+  <p>모든 위치 업데이트마다 LLM을 호출하지 않는다. 저비용 규칙 엔진이 이벤트를 감지하고, 사용자 의사결정에 도움이 될 때만 AI가 맥락에 맞는 문구와 대안을 만든다.</p>
+  <table><thead><tr><th>이벤트</th><th>판단 로직 초안</th><th>사용자 경험</th><th>가드레일</th></tr></thead><tbody>
+    <tr><td>일정 지연</td><td>예상 진행률과 실제 진행률의 차이가 설정 기준을 초과</td><td>도착 시간 재계산, 휴식/종료 지점 선택</td><td>GPS 정확도가 낮으면 지연을 단정하지 않음</td></tr>
+    <tr><td>휴식 제안</td><td>사용자 설정 시간 이상 이동했고 알림 허용 상태</td><td>가까운 휴식 장소 또는 쉬기 제안</td><td>의학적 피로 진단 금지, 빈도 제한</td></tr>
+    <tr><td>날씨 변화</td><td>공식 데이터의 조건/특보 변화</td><td>최신 예보 출처와 확인 시각 표시</td><td>실시간 데이터가 없으면 “예보 확인 필요”</td></tr>
+    <tr><td>우회·통제 공지</td><td>관련 코스의 유효한 공식 공지</td><td>공지 요약, 원문 열기, 일정 재검토</td><td>공지 확인 실패 시 안전한 최신 정보로 단정 금지</td></tr>
+    <tr><td>일몰/종료 시각 임박</td><td>예상 남은 시간과 사용자 종료 목표 비교</td><td>안전한 종료 지점/귀환 수단 확인 제안</td><td>경로·교통 정보가 검증되지 않으면 대안 확정 금지</td></tr>
+    <tr><td>기록 제안</td><td>사용자 설정에 따라 세션 종료 후 또는 장소 저장 후</td><td>“오늘 기억하고 싶은 순간이 있나요?”</td><td>사용자가 끌 수 있으며 안전 알림과 분리</td></tr>
+  </tbody></table>
+  <h3>알림 중복 방지</h3>
+  <ul><li><code>event_key + session_id + time_window</code> 기준으로 중복 이벤트를 억제한다.</li><li>사용자가 닫거나 “오늘은 그만”을 선택하면 동일 유형 알림을 일정 시간 억제한다.</li><li>중요한 안전 공지와 일반적인 기록 제안을 별도 우선순위로 관리한다.</li><li>알림을 보냈는지뿐 아니라 확인/무시/행동 선택을 기록하되, 과도한 추적은 피한다.</li></ul>
+  <h3>실행 의사코드</h3>
+  <pre>on_location_batch(session, points):
+  if not session.user_enabled_tracking:
+      return
+
+  summary = update_route_progress(points)
+  events = rules_engine.evaluate(
+      summary,
+      session.approved_schedule,
+      latest_verified_notices,
+      user.notification_preferences
+  )
+
+  for event in deduplicate(events):
+      if event.is_safety_related:
+          message = build_verified_safety_message(event)
+      else:
+          context = load_minimal_context(event, session.user_id)
+          message = ai.generate_suggestion(context, event)
+
+      send_notification_if_allowed(message)
+      log_delivery_status(event)</pre>
+</section>
+
+<section id="journal">
+  <h2>12. 개인 일기와 완주 디지털 책</h2>
+  <h3>일기 작성 흐름</h3>
+  <div class="flow">
+    <div class="flowbox">사용자가 음성·사진·텍스트를 추가</div><div class="arrow">↓</div>
+    <div class="flowbox">음성 전사 또는 메타데이터 추출 — 사용자가 허용한 경우에만 처리</div><div class="arrow">↓</div>
+    <div class="flowbox">시간·위치·당일 코스와 연결(위치가 없으면 빈 값으로 유지)</div><div class="arrow">↓</div>
+    <div class="flowbox">AI가 사실 기반 초안 생성: 관찰한 것 / 사용자가 말한 감정 / 기억할 문장</div><div class="arrow">↓</div>
+    <div class="flowbox">사용자 편집·승인 후 저장</div>
+  </div>
+  <h3>일기 생성 프롬프트 규칙</h3>
+  <pre>목표: 사용자가 제공한 기록만 사용해 자연스러운 여행 일기 초안을 작성한다.
+입력: 사용자의 음성 전사, 텍스트, 선택한 사진 설명, 확인된 시간/장소.
+규칙:
+- 제공되지 않은 사건, 대화, 감정, 장소를 만들어내지 않는다.
+- 감정은 사용자가 직접 표현한 범위 안에서만 서술한다.
+- 위치가 불확실하면 특정 장소명을 쓰지 않는다.
+- 기록이 부족하면 짧게 쓰거나 사용자에게 추가 질문한다.
+- 초안임을 표시하고 사용자가 수정하기 전에는 최종 기록으로 간주하지 않는다.</pre>
+  <h3>디지털 책 구조</h3>
+  <table><thead><tr><th>페이지/섹션</th><th>내용</th><th>생성 규칙</th></tr></thead><tbody>
+    <tr><td>표지</td><td>여행 제목, 날짜, 대표 사진</td><td>사용자가 제목·사진·테마 선택</td></tr>
+    <tr><td>프롤로그</td><td>여행 목표와 시작 이유</td><td>사용자가 제공한 내용이 없으면 빈 템플릿 또는 질문</td></tr>
+    <tr><td>여정 지도</td><td>완료한 코스·기록된 경로</td><td>GPS 기록과 공식 코스 데이터를 구분</td></tr>
+    <tr><td>날짜별 챕터</td><td>일기, 사진, 방문 장소, 거리·시간</td><td>저장·승인된 기록만 포함</td></tr>
+    <tr><td>하이라이트</td><td>사용자가 표시한 기억에 남는 순간</td><td>기록 근거와 사용자 선택 우선</td></tr>
+    <tr><td>통계</td><td>거리, 이동 시간, 기록 일수, 코스</td><td>계산 가능한 실제 데이터만 사용</td></tr>
+    <tr><td>에필로그</td><td>여행을 마친 소감</td><td>사용자에게 소감을 묻거나 초안 승인 요청</td></tr>
+  </tbody></table>
+  <h3>책 생성 상태</h3>
+  <p><code>draft → generating → preview_ready → user_approved → exported</code></p>
+  <ul><li>생성 실패 시 재시도하고, 실패 원인을 사용자에게 안내한다.</li><li>이미지 저작권·사용자 권한을 확인하고, PDF에 포함된 개인정보를 검토할 수 있게 한다.</li><li>공유 링크는 기본 비공개이며, 사용자가 명시적으로 공유를 켜야 한다.</li><li>책 생성에 포함할 일기·사진을 사용자가 선택하거나 제외할 수 있다.</li></ul>
+</section>
+
+<section id="security">
+  <h2>13. 보안·개인정보·안전</h2>
+  <h3>권한과 동의</h3>
+  <ul><li>위치 권한은 기능 사용 직전에 목적을 설명하고 요청한다. 항상 위치 권한을 기본으로 요구하지 않는다.</li><li>마이크·사진·AI 처리 동의는 각각 구분하고, 철회 방법을 제공한다.</li><li>위치 추적은 사용자가 트레킹 세션을 시작한 경우에만 수행하며, 일시정지/종료가 명확해야 한다.</li><li>사용자가 선택하지 않은 위치·음성 데이터는 개인화 학습이나 다른 목적으로 재사용하지 않는다.</li></ul>
+  <h3>보안 기본 요구사항</h3>
+  <ul><li>전송 중 HTTPS, 저장 시 서비스가 지원하는 암호화, 비밀키의 서버 보관</li><li>DB row-level security 또는 서버의 소유권 검사로 사용자 간 데이터 격리</li><li>미디어 파일은 비공개 저장, 짧은 만료의 서명 URL 사용</li><li>LLM 프롬프트와 로그에 원시 GPS·음성 전체를 불필요하게 남기지 않음</li><li>계정 삭제 시 원본 파일, 파생 PDF, 캐시와 백업의 삭제/만료 정책 적용</li><li>API rate limit, 입력 검증, 업로드 용량·파일 형식 제한, 관리자 권한 분리</li></ul>
+  <h3>안전 설계</h3>
+  <div class="warning">이 앱은 구조·구급 서비스가 아니며, GPS나 예보만으로 안전을 보장하지 않는다. 위급한 경우 현지 공식 긴급 연락 및 구조 안내를 우선하도록 명확히 안내한다.</div>
+  <ul><li>공식 통제·우회 공지의 최신 여부와 확인 시각을 표시한다.</li><li>위치가 부정확하거나 데이터가 오래되면 경로 안내 신뢰도를 낮춰 표시한다.</li><li>위험 상황에서 AI가 임의의 지름길을 제안하지 않도록 한다.</li><li>실시간 교통·영업 상태가 연결되지 않았다면 “확인된 정보”라고 표시하지 않는다.</li><li>사용자가 선택한 신뢰 연락처 공유 기능은 별도 동의·테스트가 완료된 후 추가한다.</li></ul>
+</section>
+
+<section id="mvp">
+  <h2>14. MVP 범위와 우선순위</h2>
+  <p class="lead">MVP는 “여행 일정 생성 → 트레킹 기록 → 능동 알림 → 일기 저장 → PDF 여행책 생성”이라는 하나의 완결된 경험을 검증한다.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">P0 · 필수</span><h3>반드시 포함</h3><ul><li>로그인과 프로필</li><li>공식 코스 데이터의 승인된 초기셋</li><li>일정 생성·수정·승인</li><li>지도와 트레킹 세션</li><li>AI 질문/도구 호출</li><li>3~4개 규칙 기반 알림</li><li>텍스트·음성 메모와 사진</li><li>AI 일기 초안</li><li>PDF 디지털 책</li><li>데이터 삭제/권한 설정</li></ul></div>
+    <div class="card"><span class="tag orange">P1/P2 · 보류</span><h3>검증 후 추가</h3><ul><li>복잡한 다중 에이전트 구조</li><li>AI가 자동 예약·결제 수행</li><li>웨어러블 생체 데이터 분석</li><li>고급 이미지 인식·장소 자동 식별</li><li>실시간 친구 위치 공유</li><li>실물 포토북 주문·배송</li><li>전 코스 완전 오프라인 내비게이션</li><li>모든 외부 교통 API 동시 연동</li></ul></div>
+  </div>
+  <h3>초기 데이터 범위</h3>
+  <ol><li>공식 출처 및 사용 조건을 확인한 코스 메타데이터를 우선 등록한다.</li><li>경로 좌표/GPX 사용 권한을 확보하기 전에는 공식 홈페이지로 연결하거나 지도에서 이용자가 선택한 지점을 안내하는 방식으로 제한한다.</li><li>주변 장소는 검증된 POI 제공자 한 곳으로 시작하고, 정보가 부족한 경우를 UI에서 명확히 표시한다.</li><li>첫 현장 테스트는 1~2개 코스로 한정해 GPS·일기·책 생성 품질을 확인한다.</li></ol>
+</section>
+
+<section id="roadmap">
+  <h2>15. 개발 로드맵</h2>
+  <p>가정: 소규모 개발팀 1~2명, 주 5일 기준. 외부 데이터 사용 승인과 앱 심사 기간은 별도이며, 실제 일정은 기술 검증 후 조정한다.</p>
+  <div class="timeline">
+    <div class="timeline-item"><h3>1주 차 — 요구사항·데이터 검증</h3><p>공식 코스 데이터 사용 가능성 확인, 사용자 인터뷰, 핵심 플로우, 디자인 시스템, 개인정보 흐름 설계.</p><span class="tag">산출물: PRD · 화면 흐름 · 데이터 출처표</span></div>
+    <div class="timeline-item"><h3>2주 차 — 프로젝트 기반</h3><p>모바일 앱/웹 셋업, 인증, DB, 스토리지, 프로필·여행 CRUD.</p><span class="tag">산출물: 로그인 가능한 앱</span></div>
+    <div class="timeline-item"><h3>3주 차 — 코스와 일정</h3><p>코스 검색·상세, 일정 생성·수정, 승인 버전, 지도 표시.</p><span class="tag">산출물: 계획 수립 플로우</span></div>
+    <div class="timeline-item"><h3>4주 차 — 트레킹 세션</h3><p>GPS 권한, 시작/일시정지/종료, 거리·시간 계산, 위치 오류 처리.</p><span class="tag">산출물: 현장 기록 가능한 빌드</span></div>
+    <div class="timeline-item"><h3>5주 차 — AI Agent와 알림</h3><p>도구 호출, 검증된 데이터 조회, 일정 지연·공지 알림, 중복 억제.</p><span class="tag">산출물: 맥락 기반 동행자</span></div>
+    <div class="timeline-item"><h3>6주 차 — 저널</h3><p>음성 전사, 사진 첨부, 위치/시간 연결, AI 초안 편집·저장.</p><span class="tag">산출물: 하루 일기 완성</span></div>
+    <div class="timeline-item"><h3>7주 차 — 디지털 책</h3><p>템플릿, 페이지 나눔, 지도·통계, PDF 미리보기와 다운로드.</p><span class="tag">산출물: 완주 책 생성</span></div>
+    <div class="timeline-item"><h3>8주 차 — 현장 테스트와 개선</h3><p>실제 트레킹 테스트, 배터리·오프라인·권한·접근성·일기 품질 검증.</p><span class="tag">산출물: MVP 후보 버전</span></div>
+  </div>
+  <div class="note">백그라운드 GPS, 오프라인 지도, 안정적인 푸시 동작은 모바일 OS 정책과 지도 SDK 제약에 영향을 받으므로 3~4주 차부터 실제 기기에서 검증한다.</div>
+</section>
+
+<section id="testing">
+  <h2>16. 테스트 계획과 성공 지표</h2>
+  <h3>핵심 테스트 케이스</h3>
+  <table><thead><tr><th>영역</th><th>테스트</th><th>기대 결과</th></tr></thead><tbody>
+    <tr><td>계획</td><td>사용자가 하루 거리·종료 시각을 변경</td><td>영향받는 일정 재계산, 승인 전 확정 변경 없음</td></tr>
+    <tr><td>GPS</td><td>위치 권한 거부, 정확도 저하, 앱 백그라운드 전환</td><td>상태 안내, 수동 기록 대안, 데이터 오류 방지</td></tr>
+    <tr><td>알림</td><td>동일 이벤트 반복 발생</td><td>중복 알림 억제 및 설정 반영</td></tr>
+    <tr><td>공지</td><td>공식 공지 데이터가 오래되거나 조회 실패</td><td>최신 정보로 단정하지 않고 확인 필요 표시</td></tr>
+    <tr><td>AI</td><td>존재하지 않는 장소를 질문</td><td>확인 불가를 설명하고 검증된 검색만 제안</td></tr>
+    <tr><td>일기</td><td>음성 기록에 장소·감정이 불명확</td><td>추측하지 않고 중립적 초안 또는 추가 질문</td></tr>
+    <tr><td>PDF</td><td>긴 일기, 한글, 사진 다수, 기록 없는 날짜</td><td>글자 잘림 없이 생성, 빈 날짜를 지어내지 않음</td></tr>
+    <tr><td>보안</td><td>다른 사용자 ID로 데이터 조회 시도</td><td>접근 거부, 민감 정보 노출 없음</td></tr>
+    <tr><td>삭제</td><td>계정·여행 기록 삭제 요청</td><td>정책에 따른 원본·파생 파일 삭제/만료 처리</td></tr>
+  </tbody></table>
+  <h3>제품 지표</h3>
+  <div class="grid three">
+    <div class="card"><h4>Planning</h4><p>계획 완성률, 계획 소요 시간, 추천 일정 수정률</p></div>
+    <div class="card"><h4>Agent</h4><p>알림 유용성, 무시율, 잘못된 알림 신고, 도구 호출 성공률</p></div>
+    <div class="card"><h4>Journal</h4><p>기록한 날짜 수, AI 초안 저장률, 수정량, 작성 소요 시간</p></div>
+    <div class="card"><h4>Book</h4><p>책 생성 완료율, PDF 다운로드율, 만족도, 재생성 횟수</p></div>
+    <div class="card"><h4>Reliability</h4><p>크래시율, GPS 누락률, 동기화 실패율, PDF 오류율</p></div>
+    <div class="card"><h4>Trust</h4><p>데이터 삭제 완료율, 권한 설정 이해도, 부정확 정보 신고</p></div>
+  </div>
+  <p class="note">초기에는 목표 수치를 임의로 고정하지 말고, 5~10명 사용성 테스트와 소규모 현장 테스트의 기준선을 측정한 후 개선 목표를 설정한다.</p>
+</section>
+
+<section id="risks">
+  <h2>17. 주요 리스크와 대응</h2>
+  <table><thead><tr><th>리스크</th><th>영향</th><th>대응</th></tr></thead><tbody>
+    <tr><td>공식 데이터 이용권 미확보</td><td>코스 데이터 재사용 불가</td><td>초기 단계에서 이용 조건 문의, 허가된 데이터 또는 링크 연동으로 대체</td></tr>
+    <tr><td>경로 변경 정보 지연</td><td>잘못된 길 안내</td><td>원문 링크·확인 시각, 데이터 만료 정책, 관리자 검토</td></tr>
+    <tr><td>GPS/배터리 문제</td><td>기록 누락, 사용자 불만</td><td>수집 주기 최적화, 로컬 저장, 세션 복구·수동 기록</td></tr>
+    <tr><td>통신 불안정</td><td>지도·AI 사용 제한</td><td>저장된 일정·코스 요약·기록 임시 저장, 재연결 동기화</td></tr>
+    <tr><td>알림 피로</td><td>앱 비활성화</td><td>우선순위·빈도 제한, 사용자별 설정, 효용 측정</td></tr>
+    <tr><td>AI 허구 생성</td><td>여행 기록과 안내 신뢰 하락</td><td>출처 기반 응답, 구조화된 도구 결과, 사용자 승인</td></tr>
+    <tr><td>민감 위치 유출</td><td>개인정보 피해</td><td>최소 수집, 접근 통제, 보유 기간, 삭제 절차, 로그 최소화</td></tr>
+    <tr><td>PDF 레이아웃 오류</td><td>최종 결과물 품질 저하</td><td>긴 글·다국어·사진 수별 템플릿 테스트, 재생성 기능</td></tr>
+  </tbody></table>
+</section>
+
+<section id="launch">
+  <h2>18. 출시 전 체크리스트</h2>
+  <p>아래 항목을 체크해 개발 준비도를 관리할 수 있다. 체크 상태는 현재 브라우저에서만 유지되며 서버에 저장되지 않는다.</p>
+  <div class="progress"><div id="progressbar" class="progressbar"></div></div>
+  <p id="progress-text" class="small">0개 완료</p>
+  <div class="checklist" id="launch-checklist">
+    <label><input type="checkbox"><span>제주올레 코스·공지 데이터의 이용 조건을 확인했다.</span></label>
+    <label><input type="checkbox"><span>지도 SDK의 도보 경로·캐싱·오프라인·상업적 이용 조건을 확인했다.</span></label>
+    <label><input type="checkbox"><span>핵심 사용자 시나리오와 화면 와이어프레임을 확정했다.</span></label>
+    <label><input type="checkbox"><span>위치·마이크·사진·AI 처리에 대한 동의 흐름을 설계했다.</span></label>
+    <label><input type="checkbox"><span>일정 변경은 사용자 승인 후 반영되도록 구현했다.</span></label>
+    <label><input type="checkbox"><span>GPS 권한 거부·오류·오프라인 상태를 테스트했다.</span></label>
+    <label><input type="checkbox"><span>오래된 공지와 검증되지 않은 장소 정보를 구분한다.</span></label>
+    <label><input type="checkbox"><span>중복 알림 억제와 알림 끄기 설정을 테스트했다.</span></label>
+    <label><input type="checkbox"><span>AI 일기에서 추측성 사실을 만들지 않는지 검증했다.</span></label>
+    <label><input type="checkbox"><span>한글 폰트·긴 일기·다량의 사진으로 PDF를 테스트했다.</span></label>
+    <label><input type="checkbox"><span>사용자 데이터 내보내기·삭제와 파일 접근 권한을 검증했다.</span></label>
+    <label><input type="checkbox"><span>실제 올레길에서 배터리·GPS·통신·알림 현장 테스트를 완료했다.</span></label>
+  </div>
+  <button class="btn secondary" onclick="window.print()">문서 인쇄 / PDF로 저장</button>
+</section>
+
+<section id="sources">
+  <h2>19. 출처와 가정</h2>
+  <h3>공식 및 참고 링크</h3>
+  <ol>
+    <li><a href="https://www.jejuolle.org/trail#/" target="_blank" rel="noopener">제주올레 트레일 공식 코스 안내</a> — 코스 목록, 거리·난이도·예상 시간, 공지 확인의 기준 출처.</li>
+    <li><a href="https://www.jejuolle.org/jejuolle" target="_blank" rel="noopener">사단법인 제주올레 소개</a> — 제주올레의 목적 및 공식 단체 정보.</li>
+    <li><a href="https://www.data.go.kr/" target="_blank" rel="noopener">공공데이터포털</a> — 공공 API·데이터 제공 여부를 검토할 출발점.</li>
+  </ol>
+  <h3>문서 해석 시 주의</h3>
+  <ul>
+    <li>이 문서는 개발 착수를 위한 제품 요구사항 및 기술 설계 초안이다. 실제 API 제공 여부, 가격, 이용약관, 앱 심사 조건은 구현 전에 각 공급자의 최신 문서로 검증해야 한다.</li>
+    <li>공식 홈페이지에서 확인한 코스 수·총길이·코스 속성은 변경될 수 있으므로 데이터베이스에 고정 상수로만 넣지 말고 출처·확인 시각·버전을 관리한다.</li>
+    <li>화면, API 경로, 데이터베이스 스키마는 제안안이며 실제 개발 중 기술 검증과 사용자 조사 결과에 따라 수정한다.</li>
+    <li>이 제품은 공식 제주올레가 운영·보증하는 서비스가 아니다. 제휴나 공식 승인을 받기 전에는 공식 서비스로 오인될 표현·브랜딩을 피한다.</li>
+  </ul>
+  <div class="note"><strong>제품 정의 한 줄:</strong> “제주를 걷는 동안에는 가장 믿음직한 동행자가 되고, 여행이 끝난 후에는 가장 소중한 기록이 되는 AI.”</div>
+</section>
+</main>
+</div>
+<footer>
+  JEJU TRAIL MATE · Product & Engineering Specification v1.0 · 2026-11-04<br>
+  본 문서는 기획 초안이며 안전·법률·데이터 이용 조건의 최종 검토를 대체하지 않습니다.
+</footer>
+<script>
+(function(){
+ const root=document.getElementById('launch-checklist');
+ const boxes=[...root.querySelectorAll('input[type="checkbox"]')];
+ const bar=document.getElementById('progressbar');
+ const text=document.getElementById('progress-text');
+ function update(){
+   const done=boxes.filter(b=>b.checked).length;
+   bar.style.width=(done/boxes.length*100)+'%';
+   text.textContent=done+' / '+boxes.length+'개 완료';
+ }
+ boxes.forEach(b=>b.addEventListener('change',update));
+ update();
+})();
+</script>
+</body>
+</html>

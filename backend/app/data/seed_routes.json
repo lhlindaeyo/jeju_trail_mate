@@ -1,0 +1,23 @@
+{
+  "_comment": "개발용 초기 데이터셋. 모든 값은 기억/공개 자료 기반의 '미검증' 값이며 좌표는 근사치입니다. 실제 운영 전 관리자가 제주올레 공식 사이트(https://www.jejuolle.org/trail)와 대조해 verification_status=verified, checked_at 을 갱신해야 합니다. GPX/경로 좌표는 사용 허가 확보 전까지 포함하지 않습니다.",
+  "routes": [
+    {"official_code": "1", "name": "제주올레 1코스", "start_point": "시흥초등학교", "end_point": "광치기해변",
+     "start_lat": 33.4785, "start_lon": 126.8960, "end_lat": 33.4524, "end_lon": 126.9236,
+     "distance_km": 15.1, "difficulty": "중", "estimated_duration_min": 270, "tags": ["바다", "오름", "일출"]},
+    {"official_code": "6", "name": "제주올레 6코스", "start_point": "쇠소깍다리", "end_point": "제주올레 여행자센터",
+     "start_lat": 33.2526, "start_lon": 126.6237, "end_lat": 33.2480, "end_lon": 126.5640,
+     "distance_km": 11.0, "difficulty": "하", "estimated_duration_min": 210, "tags": ["바다", "카페", "도심"]},
+    {"official_code": "7", "name": "제주올레 7코스", "start_point": "제주올레 여행자센터", "end_point": "월평 아왜낭목",
+     "start_lat": 33.2480, "start_lon": 126.5640, "end_lat": 33.2547, "end_lon": 126.4510,
+     "distance_km": 17.6, "difficulty": "중", "estimated_duration_min": 330, "tags": ["바다", "해안절벽", "풍경"]},
+    {"official_code": "10", "name": "제주올레 10코스", "start_point": "화순금모래해변", "end_point": "하모체육공원",
+     "start_lat": 33.2380, "start_lon": 126.3350, "end_lat": 33.2160, "end_lon": 126.2530,
+     "distance_km": 15.6, "difficulty": "중", "estimated_duration_min": 330, "tags": ["바다", "산방산", "문화"]},
+    {"official_code": "14", "name": "제주올레 14코스", "start_point": "저지마을", "end_point": "한림항",
+     "start_lat": 33.3326, "start_lon": 126.2633, "end_lat": 33.4130, "end_lon": 126.2610,
+     "distance_km": 19.1, "difficulty": "중", "estimated_duration_min": 390, "tags": ["숲", "바다", "마을"]},
+    {"official_code": "17", "name": "제주올레 17코스", "start_point": "광령1리사무소", "end_point": "관덕정",
+     "start_lat": 33.4640, "start_lon": 126.4300, "end_lat": 33.5130, "end_lon": 126.5220,
+     "distance_km": 18.1, "difficulty": "중", "estimated_duration_min": 360, "tags": ["바다", "도심", "문화"]}
+  ]
+}

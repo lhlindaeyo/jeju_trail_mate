@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ book.title }}</title>
+<style>
+  @page { size: A5; margin: 16mm 14mm; }
+  :root { --accent: {{ theme.accent }}; --paper: {{ theme.paper }}; --ink: {{ theme.ink }}; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font-family: "Noto Serif KR", "Nanum Myeongjo", "Apple SD Gothic Neo", "Malgun Gothic", serif;
+         line-height: 1.8; word-break: keep-all; overflow-wrap: anywhere; }
+  .page { max-width: 640px; margin: 0 auto; padding: 32px 22px; page-break-after: always; break-after: page; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  h1 { font-size: 2.1rem; line-height: 1.25; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.25rem; color: var(--accent); border-bottom: 1px solid currentColor; padding-bottom: 6px; margin: 0 0 16px; }
+  .muted { color: #6b746f; font-size: .85rem; }
+  .cover { display: flex; flex-direction: column; justify-content: center; min-height: 80vh; }
+  .cover img { width: 100%; max-height: 420px; object-fit: cover; border-radius: 10px; margin: 18px 0; }
+  .empty { color: #8a918c; font-style: italic; }
+  .memo { border-left: 3px solid var(--accent); padding: 2px 12px; margin: 10px 0; }
+  .memo.hl { background: rgba(0,0,0,.035); }
+  .photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+  .photos figure { margin: 0; break-inside: avoid; }
+  .photos img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; }
+  .photos figcaption { font-size: .8rem; color: #6b746f; }
+  .track { width: 100%; height: auto; background: #fff; border: 1px solid #dde3db; border-radius: 8px; }
+  .track polyline { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 8px 4px; border-bottom: 1px solid #e3e6e1; }
+  td:last-child { text-align: right; font-weight: 700; }
+  ul.toc { list-style: none; padding: 0; } ul.toc li { padding: 4px 0; border-bottom: 1px dotted #ccd2cb; }
+  .text { white-space: pre-wrap; }
+  @media print { .page { padding: 0; } }
+</style>
+</head>
+<body>
+
+<section class="page cover">
+  <div class="muted">JEJU TRAIL MATE · 나의 올레 이야기</div>
+  <h1>{{ book.title }}</h1>
+  <div>{{ trip.start_date.isoformat() }} – {{ trip.end_date.isoformat() }}</div>
+  {% if cover %}<img src="{{ cover }}" alt="표지 사진">{% endif %}
+</section>
+
+<section class="page">
+  <h2>목차</h2>
+  <ul class="toc">
+    <li>프롤로그</li>
+    <li>여정 지도</li>
+    {% for c in chapters %}<li>{{ c.date.isoformat() }} ({{ c.weekday }})</li>{% endfor %}
+    <li>기억에 남는 순간</li><li>여행 통계</li><li>에필로그</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>프롤로그</h2>
+  {% if book.prologue %}<p class="text">{{ book.prologue }}</p>
+  {% else %}<p class="empty">이 여행을 시작한 이유를 직접 적어 보세요. (아직 작성되지 않음)</p>{% endif %}
+</section>
+
+<section class="page">
+  <h2>여정 지도</h2>
+  {% if track_svg %}{{ track_svg | safe }}
+  <p class="muted">앱에 기록된 GPS 이동 경로입니다. 공식 제주올레 코스 경로와 다를 수 있습니다.</p>
+  {% else %}<p class="empty">기록된 GPS 경로가 없습니다.</p>{% endif %}
+</section>
+
+{% for c in chapters %}
+<section class="page">
+  <h2>{{ c.date.isoformat() }} ({{ c.weekday }})</h2>
+  {% for w in c.walks %}<p class="muted">걸은 길: {{ w.route }} · 기록 {{ w.km }}km</p>{% endfor %}
+  {% if c.daily_text %}<p class="text">{{ c.daily_text }}</p>{% endif %}
+  {% for m in c.memos %}<div class="memo{% if m.highlight %} hl{% endif %}"><span class="muted">{{ m.time }}</span><div class="text">{{ m.text }}</div></div>{% endfor %}
+  {% if c.photos %}<div class="photos">{% for p in c.photos %}<figure><img src="{{ p.src }}" alt="여행 사진">{% if p.caption %}<figcaption>{{ p.caption }}</figcaption>{% endif %}</figure>{% endfor %}</div>{% endif %}
+  {% if not c.daily_text and not c.memos and not c.photos and not c.walks %}<p class="empty">이 날의 기록이 없습니다.</p>{% endif %}
+</section>
+{% endfor %}
+
+<section class="page">
+  <h2>기억에 남는 순간</h2>
+  {% for h in highlights %}<div class="memo hl"><span class="muted">{{ h.date.isoformat() }}</span><div class="text">{{ h.text }}</div></div>
+  {% else %}<p class="empty">하이라이트로 표시한 기록이 없습니다.</p>{% endfor %}
+</section>
+
+<section class="page">
+  <h2>여행 통계</h2>
+  <table>
+    <tr><td>여행 기간</td><td>{{ stats.trip_days }}일</td></tr>
+    <tr><td>기록한 날</td><td>{{ stats.record_days }}일</td></tr>
+    <tr><td>기록된 이동 거리</td><td>{{ stats.total_km }}km</td></tr>
+    <tr><td>기록된 걷기 시간</td><td>{{ stats.total_hours }}시간</td></tr>
+    <tr><td>앱 기록상 완주 코스</td><td>{{ stats.completed_routes | join(", ") if stats.completed_routes else "없음" }}</td></tr>
+  </table>
+  <p class="muted">완주 여부는 앱의 이동 기록 기준이며 제주올레 공식 스탬프·완주 인증과는 별개입니다.</p>
+</section>
+
+<section class="page">
+  <h2>에필로그</h2>
+  {% if book.epilogue %}<p class="text">{{ book.epilogue }}</p>
+  {% else %}<p class="empty">여행을 마친 소감을 직접 남겨 보세요. (아직 작성되지 않음)</p>{% endif %}
+  <p class="muted">생성: {{ generated_at }} · JEJU TRAIL MATE는 제주올레가 운영·보증하는 서비스가 아닙니다.</p>
+</section>
+
+</body>
+</html>
