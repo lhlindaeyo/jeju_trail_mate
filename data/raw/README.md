@@ -4,7 +4,7 @@
 
 | 폴더 | 파일 | 현재 상태 (2026-11-05) |
 |---|---|---|
-| `hayoung_olle/` | 하영올레 SHP — 코스별 6개 파일 `hayoung-olle-course-N.{shp,shx,dbf,prj,cpg,qmd}` | 1·2코스 있음, **3코스 없음** |
+| `hayoung_olle/` | 하영올레 SHP — 코스별 6개 파일 `hayoung-olle-course-N.{shp,shx,dbf,prj,cpg,qmd}` | 1·2·3코스 적재 완료 (8.84 / 5.87 / 6.23 km, 공시 8.4 / 5.8 / 6.2 km) |
 | `olle_course_status/` | 제주특별자치도_올레코스현황 CSV | 있음 (29개 코스, 기준일 2026-07-31) |
 | `poi/` | 공공와이파이 관광지 AP CSV, OpenAPI 활용가이드(HWP) 2종 | 있음 |
 

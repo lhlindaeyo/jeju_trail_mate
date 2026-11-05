@@ -27,10 +27,11 @@ from ..services.geo import haversine_m, path_length_m
 from .common import ImportError_, register
 
 SOURCE_ID = "hayoung_shp"
-REQUIRED = [".shp", ".shx", ".dbf", ".prj"]
-RECOMMENDED = [".cpg", ".qmd"]
+REQUIRED = [".shp", ".dbf", ".prj"]  # geometry, attributes, coordinate system
+RECOMMENDED = [".shx", ".cpg", ".qmd"]  # index (rebuilt by sequential read), encoding, QGIS metadata
 SNAP_M = 8.0  # endpoints closer than this are the same node
-DUPLICATE_RATIO = 1.6  # parallel parts whose lengths differ less than this are the same street
+DUPLICATE_RATIO = 1.6
+ROTATE_MAX_M = 200.0  # a closed loop is re-started at the vertex nearest City Hall if it passes this close  # parallel parts whose lengths differ less than this are the same street
 ENC_ALIASES = {"UTF-8": "utf-8", "UTF8": "utf-8", "65001": "utf-8", "949": "cp949", "EUC-KR": "cp949", "CP949": "cp949"}
 
 
@@ -59,7 +60,17 @@ def _open(shp: Path):
     enc = ENC_ALIASES.get(raw.upper(), raw or "cp949")
     crs = CRS.from_wkt(shp.with_suffix(".prj").read_text(errors="ignore"))
     tf = Transformer.from_crs(crs, CRS.from_epsg(4326), always_xy=True)
-    return shapefile.Reader(str(shp), encoding=enc, encodingErrors="replace"), enc, crs, tf
+    # Open .shp/.dbf explicitly so a missing .shx index is tolerated (records are read sequentially).
+    handles = (open(shp, "rb"), open(shp.with_suffix(".dbf"), "rb"))
+    r = shapefile.Reader(shp=handles[0], dbf=handles[1], encoding=enc, encodingErrors="replace")
+    r._jtm_handles = handles  # pyshp does not close caller-provided files
+    return r, enc, crs, tf
+
+
+def _close(r) -> None:
+    r.close()
+    for h in getattr(r, "_jtm_handles", ()):
+        h.close()
 
 
 def inspect(folder: Path) -> dict:
@@ -73,7 +84,7 @@ def inspect(folder: Path) -> dict:
         for sr in r.iterShapeRecords():
             layer["features"].append({"record": dict(zip(fields, sr.record)), "parts": len(sr.shape.parts),
                                       "points": len(sr.shape.points)})
-        r.close()
+        _close(r)
         out["layers"].append(layer)
     return out
 
@@ -234,17 +245,15 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
             for pts in _parts(sr.shape, tf):
                 g.add(pts, meta["parts"])
                 meta["parts"] += 1
-        r.close()
+        _close(r)
 
-    # The start/finish (서귀포시청 제1청사) is the node shared by every course; with one course,
-    # the node closest to all others' endpoints is used.
-    shared = None
-    if len(graphs) > 1:
-        sets = [g.nodes for g, _ in graphs.values()]
-        for cand in sets[0]:
-            if all(any(haversine_m(cand[0], cand[1], n[0], n[1]) <= SNAP_M for n in other) for other in sets[1:]):
-                shared = cand
-                break
+    # The start/finish (서귀포시청 제1청사) is the endpoint node shared by the most courses.
+    shared, best = None, 1
+    all_nodes = [(no, n) for no, (g, _) in graphs.items() for n in g.nodes]
+    for _no, cand in all_nodes:
+        count = len({no for no, n in all_nodes if haversine_m(cand[0], cand[1], n[0], n[1]) <= SNAP_M})
+        if count > best:
+            shared, best = cand, count
 
     for no, (g, meta) in sorted(graphs.items()):
         info = {"file": meta["file"], "crs": meta["crs"], "parts": meta["parts"]}
@@ -254,10 +263,17 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
         if shared:
             start = min(range(len(g.nodes)), key=lambda i: haversine_m(g.nodes[i][0], g.nodes[i][1], shared[0], shared[1]))
         path = g.circuit(start)
+        info["rotated_to_shared_start"] = False
+        if shared and haversine_m(path[0][0], path[0][1], shared[0], shared[1]) > SNAP_M                 and haversine_m(path[0][0], path[0][1], path[-1][0], path[-1][1]) <= SNAP_M:
+            # Closed loop digitised from elsewhere: start it at the vertex closest to City Hall.
+            i = min(range(len(path)), key=lambda k: haversine_m(path[k][0], path[k][1], shared[0], shared[1]))
+            if haversine_m(path[i][0], path[i][1], shared[0], shared[1]) <= ROTATE_MAX_M:
+                path = path[i:] + path[1:i + 1]
+                info["rotated_to_shared_start"] = True
         length = path_length_m(path)
         official = _official_m(meta["record"])
         info.update({"length_km": round(length / 1000, 2), "official_km": round(official / 1000, 2) if official else None,
-                     "start": [round(c, 6) for c in g.nodes[start]], "direction": "SHP 선 방향 기준 — 경유지 좌표(locate-waypoints)로 검증"})
+                     "start": [round(c, 6) for c in path[0]], "direction": "SHP 선 방향 기준 — 경유지 좌표(locate-waypoints)로 검증"})
         if official and abs(length - official) / official > 0.12:
             report["problems"].append(f"{no}코스: 복원한 경로 {length / 1000:.2f}km가 공시 거리 {official / 1000:.1f}km와 12% 넘게 다릅니다")
         report["routes"][no] = info

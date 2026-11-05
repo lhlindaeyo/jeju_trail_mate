@@ -39,7 +39,7 @@ def _seg(t0: float, t1: float, n: int = 12) -> list[list[float]]:
 SPUR_END = [ORIGIN[0] + SIDE_DEG_LAT, ORIGIN[1] + SIDE_DEG_LON + 0.001]  # ≈ 93 m east of the far corner
 
 
-def write_synthetic_shp(folder: Path, *, with_prj=True) -> None:
+def write_synthetic_shp(folder: Path, *, with_prj=True, with_course3=False) -> None:
     """Mimics the real 제주데이터허브 files: one file set per course, ONE multi-part POLYLINE with
     route_name / total_dist / total_di_1, parts out of order, a duplicate digitisation and a spur."""
     def write(no: int, parts: list[list[list[float]]], dist_m: int):
@@ -63,6 +63,12 @@ def write_synthetic_shp(folder: Path, *, with_prj=True) -> None:
     write(1, [p1a, spur, p0, dup, p2, p1b], 2190)
     small = [list(ORIGIN), [ORIGIN[0], ORIGIN[1] - 0.003], [ORIGIN[0] - 0.002, ORIGIN[1] - 0.003], list(ORIGIN)]
     write(2, [small], 900)
+    if with_course3:
+        # Closed loop digitised from a point ~1 km north that passes ~20 m from City Hall (like the real 3코스).
+        n = ORIGIN[0] + 0.009
+        loop = [[n, ORIGIN[1]], [n, ORIGIN[1] + 0.003], [ORIGIN[0] + 0.0002, ORIGIN[1] + 0.003],
+                [ORIGIN[0] + 0.0002, ORIGIN[1]], [n, ORIGIN[1]]]
+        write(3, [loop], 2600)
 
 
 def _wifi_transport(points: dict[str, list[float]]):
@@ -145,6 +151,16 @@ def test_shp_missing_prj_is_reported():
         write_synthetic_shp(Path(d), with_prj=False)
         with SessionLocal() as db, pytest.raises(ImportError_, match=".prj"):
             hayoung_shp.run(db, Path(d))
+
+
+def test_closed_loop_restarts_at_city_hall():
+    with tempfile.TemporaryDirectory() as d:
+        write_synthetic_shp(Path(d), with_course3=True)
+        with SessionLocal() as db:
+            rep = hayoung_shp.run(db, Path(d), dry_run=True)
+    r3 = rep["routes"]["3"]
+    assert r3["rotated_to_shared_start"] is True
+    assert haversine_m(*r3["start"], *ORIGIN) < 30 and "missing_courses" not in rep
 
 
 def test_wifi_api_requires_appkey(monkeypatch):
