@@ -45,6 +45,24 @@
    "ref_date": "수시",
    "license": "링크·확인용(재배포 아님)",
    "note": "공지는 관리자가 확인 후 수동 등록."
+  },
+  {
+   "id": "jeju_wifi_ap",
+   "name": "제주특별자치도_공공와이파이 관광지 AP 정보",
+   "provider": "제주특별자치도 (제주데이터허브 OpenAPI·CSV)",
+   "platform_url": "https://www.jejudatahub.net/",
+   "ref_date": null,
+   "license": "확인 필요",
+   "note": "CSV는 주소만 있음. 제주데이터허브 OpenAPI(앱키 필요)는 위도·경도 제공 → 쉼터·공공장소 후보와 경유지 위치 보정에 사용."
+  },
+  {
+   "id": "seogwipo_goodprice",
+   "name": "서귀포시 착한가격 업소 (OpenAPI V2.0)",
+   "provider": "서귀포시청",
+   "platform_url": "https://www.seogwipo.go.kr/openapi/goodPriceService/",
+   "ref_date": "실시간",
+   "license": "확인 필요",
+   "note": "키 없이 조회(REST GET, XML). 좌표가 없어 주소 지오코딩(카카오 키) 전에는 거리순 추천에 쓰지 않음."
   }
  ],
  "routes": [

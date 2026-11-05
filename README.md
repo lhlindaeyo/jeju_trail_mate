@@ -57,23 +57,29 @@ npm run dev        # http://localhost:5173
 
 > DB 구조가 v1.2에서 바뀌었습니다. 예전 개발용 `jeju_trail_mate.db`가 있으면 지우고 다시 실행하세요(운영에서는 Alembic 마이그레이션 필요).
 
-### 다운로드한 데이터 적재
+### 데이터 적재
 
-파일을 `data/raw/` 아래 정해진 폴더에 두고(자세한 위치: [data/raw/README.md](data/raw/README.md)):
+원본 위치와 각 API 사용법은 [data/raw/README.md](data/raw/README.md)에 있습니다.
 
 ```bash
 cd backend
-.venv/Scripts/python -m app.data_import hayoung ../data/raw/hayoung_olle --inspect
 .venv/Scripts/python -m app.data_import all ../data/raw --license "공공누리 제1유형"
 ```
 
-`--inspect`는 SHP의 필드·좌표계·지오메트리 종류만 출력합니다. 경유지 코드 필드를 자동으로 못 찾으면 `--code-field`, `--name-field`로 지정합니다. 하영올레 SHP를 적재하기 전까지는 하영올레의 거리·지도 경로·진행률이 "계산 예정"으로 표시됩니다(값을 지어내지 않음).
+| 단계 | 하는 일 |
+|---|---|
+| `olle` | 올레코스현황 CSV(코스별·코스명·거리·소요시간정보·시종점정보·데이터기준일자) → 29개 코스, (A)/(B) 분리, 목록에서 빠진 옛 코스 정리 |
+| `hayoung` | 코스별 SHP(조각난 다중 선)를 이어 붙여 걷는 순서의 순환 경로로 복원: 중복 선 제거, 새섬 같은 왕복 구간은 두 번, 공시 거리와 비교 |
+| `poi` | 공공와이파이 관광지 AP CSV(주소만) |
+| `goodprice` | 서귀포시 착한가격업소 OpenAPI(키 불필요) |
+| `wifi-api` | 제주데이터허브 공공와이파이 OpenAPI(`JEJU_DATAHUB_APPKEY`, 위도·경도 포함) |
+| `locate-waypoints` | 좌표가 있는 장소 이름과 경유지 이름을 맞춰, 경로 150m 안이면 경로 위로 붙여 경유지 체크인을 켬. 진행 방향도 검증 |
 
 ### 키가 없을 때
 
 - `ANTHROPIC_API_KEY` 없음 → 오프라인 모드(키워드로 도구 조회 결과만 답함).
 - `KMA_SERVICE_KEY` 없음 → "예보 확인 필요", 비 알림 꺼짐.
-- 장소 CSV 미적재 → "검증된 장소 데이터가 아직 연결되지 않았어요".
+- `JEJU_DATAHUB_APPKEY`·`KAKAO_REST_API_KEY` 없음 → 장소에 좌표가 없어 "주소 기준 목록"으로만 안내, 하영올레는 경로 진행률은 되지만 경유지 도착 알림은 출발·도착점만.
 
 ## 알려진 제약
 

@@ -153,6 +153,8 @@ class PoiPlace(Base):
     lon: Mapped[float | None] = mapped_column(Float)
     geo_precision: Mapped[str | None] = mapped_column(String(20))  # source | geocoded
     open_status: Mapped[str | None] = mapped_column(String(40))  # as published, e.g. 영업/정상, 폐업
+    detail: Mapped[str | None] = mapped_column(Text)  # published category / goods & prices / hours
+    phone: Mapped[str | None] = mapped_column(String(40))
     source_id: Mapped[str | None] = mapped_column(ForeignKey("data_sources.id"))
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     external_key: Mapped[str | None] = mapped_column(String(200), index=True)

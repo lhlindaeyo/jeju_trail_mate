@@ -1,177 +1,289 @@
-"""서귀포시 하영올레 SHP → route_segments / route_waypoints / trail_routes.path (v1.2 §04 A2, §05).
+"""서귀포시 하영올레 SHP → trail_routes.path / route_segments (v1.2 §04 A2, §05).
 
-The SHP attribute schema has not been confirmed yet, so the importer:
-  * validates the file set and reads CRS (.prj) and encoding (.cpg),
-  * reprojects everything to WGS84 (EPSG:4326),
-  * auto-detects code / name / course columns (override with --code-field etc.),
-  * handles POINT layers (waypoints) and LINE layers (one line per leg ending at a waypoint).
-Run with --inspect first to print the schema and a few records."""
+Actual data (제주데이터허브, 2023-10): one file set per course (hayoung-olle-course-N.*), each
+holding ONE multi-part POLYLINE with attributes id, link_type, route_name ("하영올레 1코스"),
+start_name, end_name, total_dist ("8.4km"), total_di_1 (8400), address. There are no waypoint
+coordinates in the SHP.
+
+The parts are not stored in walking order: some are duplicates (two digitisations of the same
+street), some are out-and-back spurs (e.g. 새섬). We rebuild a single walkable loop:
+  1. snap part endpoints into graph nodes,
+  2. drop near-duplicate parallel parts,
+  3. duplicate the shortest connections between odd-degree nodes (route inspection),
+  4. walk an Euler circuit from the start node, preferring each part's digitised direction.
+The result is checked against the published total distance."""
 from __future__ import annotations
 
+import heapq
 import re
+from collections import defaultdict
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import RouteSegment, TrailRoute
-from ..services.geo import path_length_m, project_on_path
+from ..services.geo import haversine_m, path_length_m
 from .common import ImportError_, register
 
 SOURCE_ID = "hayoung_shp"
 REQUIRED = [".shp", ".shx", ".dbf", ".prj"]
 RECOMMENDED = [".cpg", ".qmd"]
-CODE_RE = re.compile(r"^\s*([123])\s*(S|F|\d{1,2})\s*$", re.I)
+SNAP_M = 8.0  # endpoints closer than this are the same node
+DUPLICATE_RATIO = 1.6  # parallel parts whose lengths differ less than this are the same street
 ENC_ALIASES = {"UTF-8": "utf-8", "UTF8": "utf-8", "65001": "utf-8", "949": "cp949", "EUC-KR": "cp949", "CP949": "cp949"}
 
 
-def _files(folder: Path) -> tuple[Path, list[Path], list[str]]:
+# --- file handling -------------------------------------------------------------------
+def _file_sets(folder: Path) -> tuple[list[Path], list[Path], list[str]]:
     shps = sorted(folder.glob("*.shp"))
-    if len(shps) != 1:
-        raise ImportError_(f"{folder}에 .shp 파일이 정확히 1개 있어야 합니다(현재 {len(shps)}개)")
-    stem = shps[0].with_suffix("")
-    missing = [ext for ext in REQUIRED if not stem.with_suffix(ext).exists()]
-    if missing:
-        raise ImportError_(f"SHP 구성 파일이 빠졌습니다: {', '.join(missing)} — 6개 파일을 모두 받아 주세요")
-    warnings = [f"{ext} 없음 (인코딩/메타데이터 추정)" for ext in RECOMMENDED if not stem.with_suffix(ext).exists()]
-    files = [p for p in folder.iterdir() if p.with_suffix("") == stem]
-    return shps[0], files, warnings
+    if not shps:
+        raise ImportError_(f"{folder}에 .shp 파일이 없습니다")
+    files, warnings = [], []
+    for shp in shps:
+        stem = shp.with_suffix("")
+        missing = [ext for ext in REQUIRED if not stem.with_suffix(ext).exists()]
+        if missing:
+            raise ImportError_(f"{shp.name}: 구성 파일이 빠졌습니다 {', '.join(missing)} — 6개 파일을 모두 받아 주세요")
+        warnings += [f"{shp.name}: {ext} 없음" for ext in RECOMMENDED if not stem.with_suffix(ext).exists()]
+        files += [p for p in folder.iterdir() if p.with_suffix("") == stem]
+    return shps, files, warnings
 
 
-def _reader(shp: Path):
+def _open(shp: Path):
     import shapefile  # pyshp
+    from pyproj import CRS, Transformer
 
     cpg = shp.with_suffix(".cpg")
     raw = cpg.read_text(errors="ignore").strip() if cpg.exists() else "cp949"
     enc = ENC_ALIASES.get(raw.upper(), raw or "cp949")
-    return shapefile.Reader(str(shp), encoding=enc), enc
-
-
-def _transformer(shp: Path):
-    from pyproj import CRS, Transformer
-
     crs = CRS.from_wkt(shp.with_suffix(".prj").read_text(errors="ignore"))
-    return Transformer.from_crs(crs, CRS.from_epsg(4326), always_xy=True), crs
-
-
-def _detect(fields: list[str], override: str | None, *needles: str) -> str | None:
-    if override:
-        if override not in fields:
-            raise ImportError_(f"필드 {override!r}가 없습니다. 필드: {fields}")
-        return override
-    for n in needles:
-        for f in fields:
-            if n in f.lower():
-                return f
-    return None
+    tf = Transformer.from_crs(crs, CRS.from_epsg(4326), always_xy=True)
+    return shapefile.Reader(str(shp), encoding=enc, encodingErrors="replace"), enc, crs, tf
 
 
 def inspect(folder: Path) -> dict:
-    shp, files, warnings = _files(folder)
-    r, enc = _reader(shp)
-    _t, crs = _transformer(shp)
-    fields = [f[0] for f in r.fields[1:]]
-    sample = [dict(zip(fields, rec)) for rec in r.records()[:8]]
-    shape_type, count = r.shapeTypeName, len(r)
-    r.close()
-    return {"file": shp.name, "files": sorted(p.name for p in files), "warnings": warnings, "encoding": enc,
-            "crs": crs.name, "epsg": crs.to_epsg(), "shape_type": shape_type, "count": count,
-            "fields": fields, "sample": sample}
-
-
-def _gap(a, b) -> float:
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-
-def _order(k: str) -> int:
-    return -1 if k == "S" else 999 if k == "F" else int(k)
-
-
-def run(db: Session, folder: Path, *, code_field: str | None = None, name_field: str | None = None,
-        course_field: str | None = None, license: str | None = None, dry_run: bool = False) -> dict:
-    shp, files, warnings = _files(folder)
-    r, enc = _reader(shp)
-    tf, crs = _transformer(shp)
-    fields = [f[0] for f in r.fields[1:]]
-    f_code = _detect(fields, code_field, "code", "코드", "번호", "no")
-    f_name = _detect(fields, name_field, "name", "명칭", "이름", "nm")
-    f_course = _detect(fields, course_field, "course", "코스", "route")
-    kind = r.shapeTypeName.upper()
-    report = {"file": shp.name, "encoding": enc, "crs": crs.name, "shape_type": kind, "features": len(r),
-              "fields": fields, "detected": {"code": f_code, "name": f_name, "course": f_course},
-              "warnings": warnings, "routes": {}, "problems": []}
-    if not f_code:
+    shps, files, warnings = _file_sets(folder)
+    out = {"files": sorted(p.name for p in files), "warnings": warnings, "layers": []}
+    for shp in shps:
+        r, enc, crs, _tf = _open(shp)
+        fields = [f[0] for f in r.fields[1:]]
+        layer = {"file": shp.name, "encoding": enc, "crs": crs.name, "epsg": crs.to_epsg(),
+                 "shape_type": r.shapeTypeName, "count": len(r), "fields": fields, "features": []}
+        for sr in r.iterShapeRecords():
+            layer["features"].append({"record": dict(zip(fields, sr.record)), "parts": len(sr.shape.parts),
+                                      "points": len(sr.shape.points)})
         r.close()
-        raise ImportError_(f"경유지 코드 필드를 찾지 못했습니다. --code-field 로 지정하세요. 필드: {fields}")
+        out["layers"].append(layer)
+    return out
 
-    per_course: dict[str, dict[str, dict]] = {}
-    for sr in r.iterShapeRecords():
-        rec = dict(zip(fields, sr.record))
-        raw = str(rec.get(f_code, "")).strip()
-        m = CODE_RE.match(raw)
-        if not m:
-            report["problems"].append(f"코드 규칙(예: 1S/11/1F)과 다른 값 {raw!r} — 건너뜀")
-            continue
-        course = m.group(1)
-        if f_course and str(rec.get(f_course, "")).strip():
-            course = re.sub(r"\D", "", str(rec[f_course])) or course
-        pts = [[lat, lon] for lon, lat in (tf.transform(x, y) for x, y in sr.shape.points)]
-        if not pts:
-            report["problems"].append(f"{raw}: 지오메트리 없음")
-            continue
-        per_course.setdefault(course, {})[m.group(2).upper()] = {
-            "code": f"{course}{m.group(2).upper()}", "name": str(rec.get(f_name, "")).strip() if f_name else None, "pts": pts}
 
-    r.close()  # release file handles (Windows keeps them locked otherwise)
-    for course, feats in sorted(per_course.items()):
-        route = db.scalar(select(TrailRoute).where(TrailRoute.trail_type == "hayoung_olle", TrailRoute.course_no == course))
-        if route is None:
-            report["problems"].append(f"{course}코스: 시드에 없는 코스 — 건너뜀")
+# --- geometry ---------------------------------------------------------------------------
+def _parts(shape, tf) -> list[list[list[float]]]:
+    idx = list(shape.parts) + [len(shape.points)]
+    out = []
+    for a, b in zip(idx, idx[1:]):
+        pts = [[lat, lon] for lon, lat in (tf.transform(x, y) for x, y in shape.points[a:b])]
+        if len(pts) >= 2:
+            out.append(pts)
+    return out
+
+
+class _Graph:
+    def __init__(self):
+        self.nodes: list[list[float]] = []
+        self.edges: list[dict] = []  # {a, b, pts, length, part}
+
+    def node(self, p: list[float]) -> int:
+        for i, n in enumerate(self.nodes):
+            if haversine_m(n[0], n[1], p[0], p[1]) <= SNAP_M:
+                return i
+        self.nodes.append(p)
+        return len(self.nodes) - 1
+
+    def add(self, pts: list[list[float]], part: int) -> None:
+        a, b = self.node(pts[0]), self.node(pts[-1])
+        self.edges.append({"a": a, "b": b, "pts": pts, "length": path_length_m(pts), "part": part})
+
+    def dedupe(self) -> list[int]:
+        """Drop parallel parts of similar length (two digitisations of one street). Returns dropped part ids."""
+        keep, dropped = [], []
+        for e in sorted(self.edges, key=lambda e: e["part"]):
+            twin = next((k for k in keep if {k["a"], k["b"]} == {e["a"], e["b"]} and k["a"] != k["b"]
+                         and max(k["length"], e["length"]) / max(min(k["length"], e["length"]), 1) < DUPLICATE_RATIO), None)
+            if twin:
+                dropped.append(e["part"])
+            else:
+                keep.append(e)
+        self.edges = keep
+        return dropped
+
+    def degree(self) -> dict[int, int]:
+        d: dict[int, int] = defaultdict(int)
+        for e in self.edges:
+            d[e["a"]] += 1
+            d[e["b"]] += 1
+        return d
+
+    def _shortest(self, s: int, t: int) -> list[int]:
+        dist, prev, pq = {s: 0.0}, {}, [(0.0, s)]
+        while pq:
+            d, u = heapq.heappop(pq)
+            if u == t:
+                break
+            if d > dist.get(u, float("inf")):
+                continue
+            for i, e in enumerate(self.edges):
+                if u not in (e["a"], e["b"]) or e["a"] == e["b"]:
+                    continue
+                v = e["b"] if e["a"] == u else e["a"]
+                nd = d + e["length"]
+                if nd < dist.get(v, float("inf")):
+                    dist[v], prev[v] = nd, (u, i)
+                    heapq.heappush(pq, (nd, v))
+        if t not in prev and s != t:
+            raise ImportError_("경로 조각이 서로 연결되지 않습니다")
+        path, cur = [], t
+        while cur != s:
+            u, i = prev[cur]
+            path.append(i)
+            cur = u
+        return path
+
+    def make_eulerian(self) -> list[int]:
+        """Duplicate shortest connections between odd nodes (greedy pairing) so a closed walk exists."""
+        dup_parts = []
+        while True:
+            odd = [n for n, d in self.degree().items() if d % 2]
+            if not odd:
+                return dup_parts
+            best = None
+            for i in range(len(odd)):
+                for j in range(i + 1, len(odd)):
+                    p = self._shortest(odd[i], odd[j])
+                    L = sum(self.edges[k]["length"] for k in p)
+                    if best is None or L < best[0]:
+                        best = (L, p)
+            for k in best[1]:
+                e = dict(self.edges[k])
+                self.edges.append(e)
+                dup_parts.append(e["part"])
+
+    def circuit(self, start: int) -> list[list[float]]:
+        """Hierholzer walk; at each node prefer parts in their digitised direction, then longer ones."""
+        unused = set(range(len(self.edges)))
+        stack, out = [(start, None)], []
+        while stack:
+            u, via = stack[-1]
+            options = [i for i in unused if u in (self.edges[i]["a"], self.edges[i]["b"])]
+            if options:
+                options.sort(key=lambda i: (self.edges[i]["a"] != u, -self.edges[i]["length"]))
+                i = options[0]
+                unused.remove(i)
+                e = self.edges[i]
+                fwd = e["a"] == u
+                stack.append((e["b"] if fwd else e["a"], (i, fwd)))
+            else:
+                stack.pop()
+                out.append(via)
+        walk = [v for v in reversed(out) if v is not None]
+        path: list[list[float]] = []
+        for i, fwd in walk:
+            pts = self.edges[i]["pts"] if fwd else list(reversed(self.edges[i]["pts"]))
+            path.extend(pts if not path else pts[1:])
+        return path
+
+
+def _course_no(rec: dict, shp: Path) -> str | None:
+    for v in (rec.get("route_name"), shp.stem):
+        m = re.search(r"(\d+)\s*코스", str(v or "")) or re.search(r"course-(\d+)", str(v or ""))
+        if m:
+            return m.group(1)
+    return None
+
+
+def _official_m(rec: dict) -> float | None:
+    for k in ("total_di_1", "total_dist"):
+        v = rec.get(k)
+        if v in (None, ""):
             continue
-        keys = sorted(feats, key=_order)
-        segments: list[list[list[float]]] = []
-        if "POINT" in kind:
-            coords_by_code = {feats[k]["code"]: feats[k]["pts"][0] for k in keys}
-            path = list(coords_by_code.values())
-            geometry_kind = "points"  # straight lines between waypoints — not a walkable path
-        else:
-            path, coords_by_code = [], {}
-            for k in keys:
-                pts = feats[k]["pts"]
-                if path and _gap(pts[-1], path[-1]) < _gap(pts[0], path[-1]):
-                    pts = list(reversed(pts))  # orient the leg to continue from the previous end
-                segments.append(pts)
-                if not path:
-                    coords_by_code[f"{course}S"] = pts[0]
-                path.extend(pts if not path else pts[1:])
-                coords_by_code[feats[k]["code"]] = pts[-1]
-            geometry_kind = "line"
-        if len(path) < 2:
-            report["problems"].append(f"{course}코스: 경로 점이 부족합니다")
-            continue
+        m = re.search(r"\d+(\.\d+)?", str(v))
+        if m:
+            x = float(m.group())
+            return x * 1000 if "km" in str(v) else x
+    return None
+
+
+def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool = False) -> dict:
+    shps, files, warnings = _file_sets(folder)
+    graphs: dict[str, tuple[_Graph, dict]] = {}
+    report = {"files": sorted(p.name for p in files), "warnings": warnings, "routes": {}, "problems": []}
+    for shp in shps:
+        r, enc, crs, tf = _open(shp)
+        fields = [f[0] for f in r.fields[1:]]
+        for sr in r.iterShapeRecords():
+            rec = dict(zip(fields, sr.record))
+            no = _course_no(rec, shp)
+            if not no:
+                report["problems"].append(f"{shp.name}: 코스 번호를 찾지 못했습니다 {rec}")
+                continue
+            if "LINE" not in r.shapeTypeName.upper():
+                report["problems"].append(f"{shp.name}: 선형이 아닌 지오메트리({r.shapeTypeName})")
+                continue
+            g, meta = graphs.setdefault(no, (_Graph(), {"record": rec, "file": shp.name, "crs": crs.name, "encoding": enc, "parts": 0}))
+            for pts in _parts(sr.shape, tf):
+                g.add(pts, meta["parts"])
+                meta["parts"] += 1
+        r.close()
+
+    # The start/finish (서귀포시청 제1청사) is the node shared by every course; with one course,
+    # the node closest to all others' endpoints is used.
+    shared = None
+    if len(graphs) > 1:
+        sets = [g.nodes for g, _ in graphs.values()]
+        for cand in sets[0]:
+            if all(any(haversine_m(cand[0], cand[1], n[0], n[1]) <= SNAP_M for n in other) for other in sets[1:]):
+                shared = cand
+                break
+
+    for no, (g, meta) in sorted(graphs.items()):
+        info = {"file": meta["file"], "crs": meta["crs"], "parts": meta["parts"]}
+        info["dropped_duplicate_parts"] = g.dedupe()
+        info["repeated_parts"] = g.make_eulerian()
+        start = 0
+        if shared:
+            start = min(range(len(g.nodes)), key=lambda i: haversine_m(g.nodes[i][0], g.nodes[i][1], shared[0], shared[1]))
+        path = g.circuit(start)
         length = path_length_m(path)
-        info = {"geometry": geometry_kind, "length_km": round(length / 1000, 2), "waypoints_located": 0, "unmatched_codes": []}
-        report["routes"][course] = info
+        official = _official_m(meta["record"])
+        info.update({"length_km": round(length / 1000, 2), "official_km": round(official / 1000, 2) if official else None,
+                     "start": [round(c, 6) for c in g.nodes[start]], "direction": "SHP 선 방향 기준 — 경유지 좌표(locate-waypoints)로 검증"})
+        if official and abs(length - official) / official > 0.12:
+            report["problems"].append(f"{no}코스: 복원한 경로 {length / 1000:.2f}km가 공시 거리 {official / 1000:.1f}km와 12% 넘게 다릅니다")
+        report["routes"][no] = info
         if dry_run:
             continue
-        route.segments = [RouteSegment(seq=i, coords=s, length_m=path_length_m(s), source_id=SOURCE_ID) for i, s in enumerate(segments)]
+        route = db.scalar(select(TrailRoute).where(TrailRoute.trail_type == "hayoung_olle", TrailRoute.course_no == no))
+        if route is None:
+            report["problems"].append(f"{no}코스: 시드에 없는 코스 — 건너뜀")
+            continue
+        route.segments = [RouteSegment(seq=i, coords=e["pts"], length_m=e["length"], source_id=SOURCE_ID)
+                          for i, e in enumerate(sorted({e["part"]: e for e in g.edges}.values(), key=lambda e: e["part"]))]
         route.path = path
-        route.has_geometry = geometry_kind == "line"
-        route.distance_km = round(length / 1000, 2) if route.has_geometry else None
-        route.version = (route.version or 1) + 1
-        along_lo = 0.0
-        for w in route.waypoints:
-            c = coords_by_code.get(w.code)
-            if c is None:
-                info["unmatched_codes"].append(w.code)
-                continue
-            w.lat, w.lon = c
-            _dist, along = project_on_path(path, c[0], c[1], (along_lo, length))
-            w.along_m = length if w.kind == "F" else along
-            along_lo = w.along_m
-            info["waypoints_located"] += 1
+        route.has_geometry = True
+        route.distance_km = round(length / 1000, 2)
         route.start_lat, route.start_lon = path[0]
         route.end_lat, route.end_lon = path[-1]
+        route.version = (route.version or 1) + 1
+        for w in route.waypoints:  # endpoints are known: the loop starts and ends at City Hall
+            if w.kind == "S":
+                w.lat, w.lon, w.along_m = path[0][0], path[0][1], 0.0
+            elif w.kind == "F":
+                w.lat, w.lon, w.along_m = path[-1][0], path[-1][1], length
+    seeded = {r.course_no for r in db.scalars(select(TrailRoute).where(TrailRoute.trail_type == "hayoung_olle"))}
+    missing = sorted(seeded - set(graphs))
+    if missing:
+        report["missing_courses"] = [f"하영올레 {n}코스" for n in missing]
     if not dry_run:
         register(db, SOURCE_ID, files, license=license)
         db.commit()

@@ -1,14 +1,18 @@
 """Application settings loaded from environment variables / .env."""
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent  # paths below do not depend on the working directory
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = "development"  # development | production
-    database_url: str = "sqlite:///./jeju_trail_mate.db"
+    database_url: str = f"sqlite:///{(BACKEND_DIR / 'jeju_trail_mate.db').as_posix()}"
     cors_origins: str = "http://localhost:5173"
 
     # Auth: dev tokens are signed with this secret. In production, set SUPABASE_JWT_SECRET
@@ -25,9 +29,11 @@ class Settings(BaseSettings):
 
     # External data (all optional — features degrade gracefully when missing)
     kma_service_key: str | None = None  # 공공데이터포털 기상청 단기예보 serviceKey
+    jeju_datahub_appkey: str | None = None  # 제주데이터허브 프로젝트키 (공공와이파이 AP OpenAPI)
+    kakao_rest_api_key: str | None = None  # 선택: 주소/장소명 → 좌표
 
     # Storage
-    storage_dir: str = "./storage"
+    storage_dir: str = str(BACKEND_DIR / "storage")
     signed_url_ttl_seconds: int = 300
     max_upload_mb: int = 15
 

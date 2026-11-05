@@ -36,8 +36,9 @@ def _geocode(client: httpx.Client, key: str, address: str) -> tuple[float, float
 
 
 def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_category: str = "food",
-        xy_crs: str = "EPSG:5174", geocode: bool = False, license: str | None = None, dry_run: bool = False) -> dict:
-    files = sorted(folder.glob("*.csv"))
+        xy_crs: str = "EPSG:5174", geocode: bool = False, license: str | None = None, dry_run: bool = False,
+        files: list[Path] | None = None) -> dict:
+    files = files or sorted(folder.glob("*.csv"))
     if not files:
         raise ImportError_(f"{folder}에 CSV가 없습니다")
     report = {"files": [f.name for f in files], "rows": 0, "with_coords": 0, "geocoded": 0, "closed": 0, "problems": []}

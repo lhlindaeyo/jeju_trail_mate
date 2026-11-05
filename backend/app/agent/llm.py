@@ -137,6 +137,8 @@ class MockLLM:
         (("식당", "맛집", "밥", "점심", "저녁"), "find_places_near", {"category": "food"}),
         (("쉬어", "쉼터", "휴식"), "find_places_near", {"category": "rest"}),
         (("화장실",), "find_places_near", {"category": "toilet"}),
+        (("숙소", "숙박", "게스트하우스"), "find_places_near", {"category": "lodging"}),
+        (("와이파이", "wifi"), "find_places_near", {"category": "wifi"}),
         (("일기",), "create_journal_draft", {}),
         (("일정", "계획"), "get_trip_plan", {}),
         (("코스",), "list_routes", {}),

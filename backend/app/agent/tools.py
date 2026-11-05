@@ -48,7 +48,8 @@ TOOLS: list[ToolSpec] = [
              "영업 상태는 데이터 기준일의 공개 값이며 실시간이 아니다. 출처를 함께 돌려준다.", {
         "type": "object",
         "properties": {
-            "category": {"type": "string", "enum": ["food", "cafe", "rest", "toilet", "wifi"]},
+            "category": {"type": "string", "enum": ["food", "cafe", "lodging", "rest", "toilet", "wifi"],
+                         "description": "food/lodging: 서귀포시 착한가격업소, rest/wifi: 공공와이파이 설치 장소(관광지·공원 등)"},
             "radius_m": {"type": "integer", "minimum": 100, "maximum": 5000},
         },
         "required": ["category"],
