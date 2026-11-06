@@ -2,15 +2,13 @@
 
 * Closed businesses are kept with their status so the app can exclude them explicitly.
 * Coordinates: uses lat/lon columns, or LOCALDATA-style 좌표정보(X/Y) (EPSG:5174 by default),
-  or optional Kakao address geocoding (KAKAO_REST_API_KEY). Rows without coordinates stay
+  or optional address geocoding with a provider whose results may be stored (--geocode). Rows without coordinates stay
   address-only and are never used for distance-based suggestions."""
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -26,15 +24,6 @@ def _category(kind: str | None, default: str) -> str:
     return default
 
 
-def _geocode(client: httpx.Client, key: str, address: str) -> tuple[float, float] | None:
-    r = client.get("https://dapi.kakao.com/v2/local/search/address.json", params={"query": address},
-                   headers={"Authorization": f"KakaoAK {key}"})
-    if r.status_code != 200:
-        return None
-    docs = r.json().get("documents", [])
-    return (float(docs[0]["y"]), float(docs[0]["x"])) if docs else None
-
-
 def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_category: str = "food",
         xy_crs: str = "EPSG:5174", geocode: bool = False, license: str | None = None, dry_run: bool = False,
         files: list[Path] | None = None) -> dict:
@@ -42,10 +31,13 @@ def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_
     if not files:
         raise ImportError_(f"{folder}에 CSV가 없습니다")
     report = {"files": [f.name for f in files], "rows": 0, "with_coords": 0, "geocoded": 0, "closed": 0, "problems": []}
-    key = os.environ.get("KAKAO_REST_API_KEY") if geocode else None
-    if geocode and not key:
-        raise ImportError_("--geocode 에는 KAKAO_REST_API_KEY 환경변수가 필요합니다")
-    client = httpx.Client(timeout=8) if key else None
+    to_xy = None
+    if geocode:
+        from .poi_sources import geocoder
+
+        to_xy = geocoder()
+        if to_xy is None:
+            raise ImportError_("--geocode 에는 저장 가능한 지오코더가 필요합니다: 위치정보 요약DB를 data/raw/juso_entrc에 넣어 주세요")
     transformer = None
     places: list[PoiPlace] = []
     now = datetime.now(timezone.utc)
@@ -80,8 +72,8 @@ def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_
             except ValueError:
                 report["problems"].append(f"{f.name}:{i + 2} 좌표 형식 오류")
             addr = r.get(c_addr) if c_addr else None
-            if lat is None and client and addr:
-                hit = _geocode(client, key, addr)
+            if lat is None and to_xy and addr:
+                hit = to_xy(addr)
                 if hit:
                     lat, lon, precision = hit[0], hit[1], "geocoded"
                     report["geocoded"] += 1

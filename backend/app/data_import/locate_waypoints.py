@@ -3,16 +3,16 @@
 The SHP has no waypoint coordinates. A waypoint is located only when an independent dataset
 names it AND that location lies on the route:
   1. poi_places with coordinates (제주데이터허브 공공와이파이 AP OpenAPI: 천지연폭포, 새연교, 솜반천 …),
-  2. optionally Kakao keyword search (KAKAO_REST_API_KEY), restricted to the route's surroundings.
+  2. optionally the geocoder chain's place search (GEOCODER_CHAIN: local building names, VWorld, Kakao),
+     restricted to the route's surroundings. Providers whose terms forbid storing results (VWorld) only
+     yield `suggestions` in the report; their coordinates are never written.
 The point is snapped to the route (so check-in radius works along the walked line) and kept only
 within MAX_OFFSET_M of it. Located waypoints also verify the walking direction: if most of them
 appear in reverse order along the path, the path is reversed."""
 from __future__ import annotations
 
-import os
 import re
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -72,19 +72,21 @@ def point_at(path: list[list[float]], along: float) -> list[float]:
     return path[-1]
 
 
-def _kakao(name: str, center: list[float]) -> list[tuple[float, float, str]]:
-    key = os.environ.get("KAKAO_REST_API_KEY")
-    if not key:
-        return []
-    r = httpx.get("https://dapi.kakao.com/v2/local/search/keyword.json",
-                  params={"query": f"서귀포 {name}", "y": center[0], "x": center[1], "radius": 3000},
-                  headers={"Authorization": f"KakaoAK {key}"}, timeout=8)
-    if r.status_code != 200:
-        return []
-    return [(float(d["y"]), float(d["x"]), d["place_name"]) for d in r.json().get("documents", [])[:3]]
+def _place_candidates(geocoder, name: str, center: list[float]) -> tuple[list[tuple[float, float, str]], list[tuple[float, float, str]]]:
+    """(storable, lookup_only) candidates whose name matches the waypoint. Lookup-only hits (VWorld) come from
+    a provider whose terms forbid storing results: they are reported as suggestions for a human to confirm."""
+    storable, lookup = [], []
+    for h in geocoder.search_place(f"서귀포 {name}", (center[0], center[1]), 3000):
+        if _norm(name) in _norm(h.label) or _norm(h.label) in _norm(name):
+            (storable if h.storable else lookup).append((h.lat, h.lon, f"{h.label} [{h.provider}]"))
+    return storable, lookup
 
 
-def run(db: Session, *, use_kakao: bool = True, dry_run: bool = False) -> dict:
+def run(db: Session, *, use_geocoder: bool = True, geocoder=None, dry_run: bool = False) -> dict:
+    if use_geocoder and geocoder is None:
+        from ..geocode import get_geocoder
+
+        geocoder = get_geocoder()
     pois = list(db.scalars(select(PoiPlace).where(PoiPlace.lat.is_not(None))))
     report: dict = {"routes": {}}
     for route in db.scalars(select(TrailRoute).where(TrailRoute.trail_type == "hayoung_olle", TrailRoute.has_geometry.is_(True))):
@@ -96,8 +98,10 @@ def run(db: Session, *, use_kakao: bool = True, dry_run: bool = False) -> dict:
             if w.kind != "W":
                 continue
             cands = [(p.lat, p.lon, f"{p.name} ({p.source_id})") for p in _match(w.name, pois)]
-            if not cands and use_kakao:
-                cands = [c for c in _kakao(w.name, center) if _norm(w.name) in _norm(c[2]) or _norm(c[2]) in _norm(w.name)]
+            if not cands and use_geocoder and geocoder:
+                cands, lookup = _place_candidates(geocoder, w.name, center)
+                for lat, lon, label in lookup:  # not stored: shown so the owner can confirm / survey on site
+                    report.setdefault("suggestions", {}).setdefault(route.name, {})[w.name] = f"{label} → {lat:.6f}, {lon:.6f}"
             best = None
             for lat, lon, label in cands:
                 d, along = project_on_path(path, lat, lon)

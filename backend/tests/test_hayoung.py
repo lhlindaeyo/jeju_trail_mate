@@ -194,7 +194,7 @@ def hayoung_imported(client):
             aps = {"법장사골목길": [perimeter(0.1)[0] + off, perimeter(0.1)[1]], "걸매생태공원": [perimeter(0.2)[0] + off, perimeter(0.2)[1]],
                    "천지연폭포": [perimeter(0.3)[0], perimeter(0.3)[1] + off], "먼 곳": [33.40, 126.40]}
             wifi = poi_sources.wifi_api(db, appkey="test-key", dongs=["서홍동", "동홍동"], client=httpx.Client(transport=_wifi_transport(aps)))
-            located = locate_waypoints.run(db, use_kakao=False)
+            located = locate_waypoints.run(db, use_geocoder=False)
     r1 = report["routes"]["1"]
     assert r1["dropped_duplicate_parts"] == [3] and r1["repeated_parts"] == [1]  # dup removed, spur walked out and back
     assert r1["start"] == pytest.approx(list(ORIGIN), abs=1e-5)  # shared start of both courses = City Hall

@@ -2,11 +2,17 @@
 swapped (spec §08 '제공사 종속성을 줄이기 위해 내부 인터페이스로 감싼다')."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlparse
+
+import httpx
 
 from ..config import get_settings
 
@@ -120,6 +126,15 @@ class AnthropicLLM:
         return AgentRun(text="요청을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 해 주세요.", tool_calls=calls, provider=self.name)
 
 
+def match_intent(user: str, available: set[str]) -> tuple[str, dict] | None:
+    """Keyword → (tool, args) for the question part of the prompt, or None."""
+    question = user.rsplit("[사용자 질문]", 1)[-1]
+    for keywords, tool, args in MockLLM.INTENTS:
+        if tool in available and any(k in question for k in keywords):
+            return tool, dict(args)
+    return None
+
+
 class MockLLM:
     """Offline provider for development/tests. It never writes free text about the world:
     it routes by keyword to the same tools and reports their verified output."""
@@ -148,15 +163,14 @@ class MockLLM:
         raise LLMUnavailable("mock provider has no free-text generation")
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
-        question = user.rsplit("[사용자 질문]", 1)[-1]
-        available = {t.name for t in tools}
-        for keywords, tool, args in self.INTENTS:
-            if tool in available and any(k in question for k in keywords):
-                try:
-                    out = execute(tool, dict(args))
-                    return AgentRun(text=_summarize(tool, out), tool_calls=[ToolCall(tool, args, True, out)], provider=self.name)
-                except Exception as exc:
-                    return AgentRun(text=f"정보를 가져오지 못했습니다: {exc}", tool_calls=[ToolCall(tool, args, False, str(exc))], provider=self.name)
+        hit = match_intent(user, {t.name for t in tools})
+        if hit:
+            tool, args = hit
+            try:
+                out = execute(tool, dict(args))
+                return AgentRun(text=_summarize(tool, out), tool_calls=[ToolCall(tool, args, True, out)], provider=self.name)
+            except Exception as exc:
+                return AgentRun(text=f"정보를 가져오지 못했습니다: {exc}", tool_calls=[ToolCall(tool, args, False, str(exc))], provider=self.name)
         return AgentRun(
             text="(오프라인 모드) 코스·일정·날씨·공지·도착 예상·주변 장소·일기 초안에 대해 물어보실 수 있어요. "
                  "자유 대화는 AI 키를 설정하면 사용할 수 있습니다.",
@@ -204,15 +218,229 @@ def _summarize(tool: str, out: Any) -> str:
     return json.dumps(out, ensure_ascii=False, default=str)[:1500]
 
 
+# --- OpenAI-compatible providers (Ollama, Gemini, Groq, OpenRouter, vLLM, llama.cpp, LM Studio ...) ---------
+def is_local_url(url: str) -> bool:
+    """True when the endpoint is on this machine / LAN / a docker service name (data does not leave)."""
+    host = (urlparse(url).hostname or "").lower()
+    if not host:
+        return False
+    if host in ("localhost", "host.docker.internal") or host.endswith(".localhost") or "." not in host:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_loopback or ip.is_private
+    except ValueError:
+        return False
+
+
+class _KeyRing:
+    """Comma-separated API keys, used round-robin. A key rejected with 401/403/429 rests for COOLDOWN_S."""
+
+    COOLDOWN_S = 60.0
+
+    def __init__(self, keys: str | None):
+        self.keys = [k.strip() for k in (keys or "").split(",") if k.strip()]
+        self.i = 0
+        self.resting: dict[str, float] = {}
+
+    def current(self) -> str | None:
+        if not self.keys:
+            return None
+        now = time.monotonic()
+        for off in range(len(self.keys)):
+            idx = (self.i + off) % len(self.keys)
+            if self.resting.get(self.keys[idx], 0.0) <= now:
+                self.i = idx
+                return self.keys[idx]
+        return self.keys[self.i % len(self.keys)]  # all resting: try anyway
+
+    def advance(self) -> None:
+        if len(self.keys) > 1:
+            self.i = (self.i + 1) % len(self.keys)
+
+    def reject(self) -> None:
+        key = self.current()
+        if key:
+            self.resting[key] = time.monotonic() + self.COOLDOWN_S
+        self.advance()
+
+
+_THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _clean_text(text: str | None) -> str:
+    """Drop reasoning blocks some local models (Qwen3, DeepSeek-R1) put in the visible content."""
+    out = _THINK.sub("", text or "")
+    return out.split("<think>")[0].strip()  # an unclosed block means the answer was cut off
+
+
+class OpenAICompatLLM:
+    def __init__(self, name: str, base_url: str, model: str, api_key: str | None = None, *,
+                 external: bool | None = None, timeout: float = 120.0, max_turns: int = 4,
+                 client: httpx.Client | None = None):
+        self.name = name
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.keys = _KeyRing(api_key)
+        self.external = (not is_local_url(base_url)) if external is None else external
+        self.max_turns = max_turns
+        self.client = client or httpx.Client(timeout=timeout)
+
+    def _post(self, payload: dict) -> dict:
+        attempts = max(1, len(self.keys.keys))
+        for n in range(attempts):
+            headers = {"Content-Type": "application/json"}
+            if self.keys.current():
+                headers["Authorization"] = f"Bearer {self.keys.current()}"
+            try:
+                r = self.client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
+            except httpx.TimeoutException as e:
+                raise LLMUnavailable("AI 응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.") from e
+            except httpx.HTTPError as e:
+                raise LLMUnavailable("AI 서버에 연결할 수 없습니다. 네트워크를 확인하세요.") from e
+            if r.status_code in (401, 403, 429) and n + 1 < attempts:
+                log.warning("%s: key #%d rejected (%s), trying the next key", self.name, self.keys.i, r.status_code)
+                self.keys.reject()
+                continue
+            if r.status_code == 429:
+                raise LLMUnavailable("AI 요청이 많아 잠시 후 다시 시도해 주세요.")
+            if r.status_code >= 400:
+                log.warning("%s status error %s: %s", self.name, r.status_code, r.text[:200])
+                raise LLMUnavailable("AI 서버 오류가 발생했습니다.")
+            self.keys.advance()
+            try:
+                return r.json()
+            except ValueError as e:
+                raise LLMUnavailable("AI 서버 응답을 해석할 수 없습니다.") from e
+        raise LLMUnavailable("AI 서버 오류가 발생했습니다.")  # pragma: no cover
+
+    @staticmethod
+    def _message(data: dict) -> dict:
+        return (data.get("choices") or [{}])[0].get("message") or {}
+
+    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
+        data = self._post({"model": self.model, "max_tokens": max_tokens, "temperature": 0.4,
+                           "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
+        text = _clean_text(self._message(data).get("content"))
+        if not text:
+            raise LLMUnavailable("AI가 빈 응답을 반환했습니다.")
+        return text
+
+    def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
+        tool_defs = [{"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}} for t in tools]
+        messages: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        calls: list[ToolCall] = []
+        grounded = False
+
+        def run_one(call_id: str, name: str, args: dict) -> None:
+            try:
+                out = execute(name, args)
+                calls.append(ToolCall(name, args, True, out))
+                content = json.dumps(out, ensure_ascii=False, default=str)
+            except Exception as exc:  # tool errors go back to the model, never crash the turn
+                calls.append(ToolCall(name, args, False, str(exc)))
+                content = f"Error: {exc}"
+            messages.append({"role": "tool", "tool_call_id": call_id, "content": content})
+
+        for _ in range(min(max_turns, self.max_turns)):
+            data = self._post({"model": self.model, "max_tokens": 2000, "temperature": 0.2, "messages": messages, "tools": tool_defs})
+            msg = self._message(data)
+            tool_calls = msg.get("tool_calls") or []
+            if not tool_calls:
+                hint = None if (calls or grounded) else match_intent(user, {t.name for t in tools})
+                if hint:
+                    # Small models often answer from memory instead of calling a tool. When the question
+                    # clearly maps to one, fetch the verified data ourselves and let the model phrase it.
+                    grounded = True
+                    name, args = hint
+                    messages.append({"role": "assistant", "content": None, "tool_calls": [
+                        {"id": "call_grounding", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}]})
+                    run_one("call_grounding", name, args)
+                    continue
+                text = _clean_text(msg.get("content"))
+                if not text:
+                    raise LLMUnavailable("AI가 빈 응답을 반환했습니다.")
+                return AgentRun(text=text, tool_calls=calls, provider=self.name)
+            messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": tool_calls})
+            for i, tc in enumerate(tool_calls):
+                fn = tc.get("function") or {}
+                name, raw = fn.get("name") or "", fn.get("arguments") or {}
+                call_id = tc.get("id") or f"call_{i}"
+                try:
+                    args = raw if isinstance(raw, dict) else json.loads(raw or "{}")
+                    if not isinstance(args, dict):
+                        raise ValueError("arguments must be an object")
+                except ValueError as exc:
+                    calls.append(ToolCall(name, {}, False, f"bad arguments: {exc}"))
+                    messages.append({"role": "tool", "tool_call_id": call_id, "content": f"Error: bad arguments: {exc}"})
+                    continue
+                run_one(call_id, name, args)
+        return AgentRun(text="요청을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 해 주세요.", tool_calls=calls, provider=self.name)
+
+
+class FallbackLLM:
+    """Tries each provider in order; the next one is used when one is unavailable (rate limit, offline, ...).
+    `external` is True if ANY member is external: a later fallback may send the data out, so consent applies."""
+
+    def __init__(self, members: list[LLM]):
+        self.members = members
+        self.name = ">".join(m.name for m in members)
+        self.external = any(m.external for m in members)
+
+    def _first(self, call: Callable[[LLM], Any]) -> Any:
+        last: LLMUnavailable | None = None
+        for m in self.members:
+            try:
+                return call(m)
+            except LLMUnavailable as exc:
+                log.warning("LLM provider %s unavailable (%s); trying next", m.name, exc)
+                last = exc
+        raise last or LLMUnavailable("사용 가능한 AI 제공사가 없습니다.")
+
+    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
+        return self._first(lambda m: m.generate(system, user, max_tokens))
+
+    def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
+        return self._first(lambda m: m.run_tools(system, user, tools, execute, max_turns))
+
+
+def _make_provider(name: str) -> LLM | None:
+    """One chain entry -> provider, or None when it is not configured (missing key / URL)."""
+    s = get_settings()
+    kw = {"timeout": s.llm_timeout_s, "max_turns": s.llm_max_turns}
+    if name == "mock":
+        return MockLLM()
+    if name == "anthropic":
+        return AnthropicLLM() if s.anthropic_api_key else None
+    if name == "ollama":
+        return OpenAICompatLLM("ollama", s.ollama_base_url, s.ollama_model, None, **kw)
+    if name == "openai":
+        return OpenAICompatLLM("openai", s.openai_base_url, s.openai_model, s.openai_api_key, **kw) if s.openai_base_url and s.openai_model else None
+    if name in ("gemini", "groq", "openrouter"):
+        key = getattr(s, f"{name}_api_key")
+        return OpenAICompatLLM(name, getattr(s, f"{name}_base_url"), getattr(s, f"{name}_model"), key, **kw) if key else None
+    log.warning("unknown LLM_CHAIN entry %r ignored", name)
+    return None
+
+
+def build_llm() -> LLM:
+    s = get_settings()
+    if s.llm_chain.strip():
+        members = [m for m in (_make_provider(n.strip().lower()) for n in s.llm_chain.split(",") if n.strip()) if m]
+        if not members:
+            return MockLLM()
+        return members[0] if len(members) == 1 else FallbackLLM(members)
+    use_anthropic = s.llm_provider == "anthropic" or (s.llm_provider == "auto" and bool(s.anthropic_api_key))
+    return AnthropicLLM() if use_anthropic else MockLLM()
+
+
 _llm: LLM | None = None
 
 
 def get_llm() -> LLM:
     global _llm
     if _llm is None:
-        s = get_settings()
-        use_anthropic = s.llm_provider == "anthropic" or (s.llm_provider == "auto" and bool(s.anthropic_api_key))
-        _llm = AnthropicLLM() if use_anthropic else MockLLM()
+        _llm = build_llm()
     return _llm
 
 

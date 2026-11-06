@@ -1,0 +1,65 @@
+# 센터(대회) 실행환경용: 백엔드 + 로컬 LLM(Ollama). 인터넷 없이도 동작합니다(기상청·허브 API 제외).
+# 최소사양 가정: i7-8700 / GTX 1060 6GB / RAM 32GB  → 기본 모델 qwen3:4b (아래 OLLAMA_MODEL로 변경)
+#
+#   docker compose up -d            # 첫 실행 때 모델을 내려받습니다(인터넷 필요, 이후 볼륨에 보관)
+#   docker compose logs ollama-pull # 모델 내려받기 진행 확인
+#
+# GPU 없이 CPU만 쓰려면 ollama 서비스의 `deploy:` 블록을 지우세요(느려집니다).
+# 오프라인 반입: 인터넷 되는 PC에서 한 번 실행해 `ollama_models` 볼륨을 채운 뒤 볼륨/이미지를 옮깁니다.
+#
+# 이 파일은 작성 환경(Docker 없음)에서 실행해 보지 못했습니다 — 센터 PC에서 한 번 시험하세요.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 12
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen3:4b}"]
+    restart: "no"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////data/jeju_trail_mate.db
+      STORAGE_DIR: /data/storage
+      LLM_CHAIN: ollama,mock
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      LLM_TIMEOUT_S: "180"
+      JUSO_ENTRC_DIR: /raw/juso_entrc
+    volumes:
+      - backend_data:/data
+      - ./data/raw:/raw:ro
+
+volumes:
+  ollama_models:
+  backend_data:

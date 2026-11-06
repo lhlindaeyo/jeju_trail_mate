@@ -7,8 +7,10 @@
     python -m app.data_import goodprice                              # 서귀포시 착한가격업소 OpenAPI (no key)
     python -m app.data_import wifi-api     [--dongs 서홍동,동홍동]     # 제주데이터허브 OpenAPI (JEJU_DATAHUB_APPKEY)
     python -m app.data_import locate-waypoints                       # place Hayoung waypoints on the route
+    python -m app.data_import juso-inspect [folder]                  # check the downloaded 위치정보 요약DB (default data/raw/juso_entrc)
+    python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"   # try every provider in GEOCODER_CHAIN
 
-Keys are read from the environment or backend/.env (JEJU_DATAHUB_APPKEY, KAKAO_REST_API_KEY).
+Keys are read from the environment or backend/.env (JEJU_DATAHUB_APPKEY, VWORLD_API_KEY, KAKAO_REST_API_KEY).
 """
 import argparse
 import json
@@ -43,10 +45,39 @@ def _poi_folder(db, folder: Path, a) -> dict:
     return out or {"error": "CSV가 없습니다"}
 
 
+def _geocode_tools(a) -> dict:
+    from ..geocode import get_geocoder
+    from ..geocode.base import GeocoderError
+    from ..geocode.local_juso import inspect as juso_inspect
+
+    if a.kind == "juso-inspect":
+        return juso_inspect(a.folder or get_settings().juso_entrc_dir)
+    if not a.address:
+        return {"error": "--address 가 필요합니다"}
+    chain = get_geocoder()
+    if not chain:
+        return {"error": "사용 가능한 지오코더가 없습니다 (위치정보 요약DB 또는 VWORLD_API_KEY 필요)"}
+    out: dict = {}
+    for p in chain.providers:
+        try:
+            hit = p.geocode_address(a.address)
+            places = [] if hit else p.search_place(a.address)
+            out[p.name] = {"storable": p.storable,
+                           "address": f"{hit.lat:.6f}, {hit.lon:.6f}" if hit else None,
+                           "places": [f"{h.label} {h.lat:.6f}, {h.lon:.6f}" for h in places]}
+        except GeocoderError as e:
+            out[p.name] = {"error": str(e)}
+        except Exception as e:
+            out[p.name] = {"error": f"{type(e).__name__}: {e}"}
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.data_import")
-    ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "wifi-api", "locate-waypoints", "all"])
+    ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "wifi-api", "locate-waypoints", "all",
+                                     "juso-inspect", "geocode"])
     ap.add_argument("folder", type=Path, nargs="?")
+    ap.add_argument("--address", help="geocode: 주소 또는 장소명")
     ap.add_argument("--inspect", action="store_true", help="print the SHP schema without loading")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--license", help="이용 조건 (예: 공공누리 제1유형)")
@@ -54,6 +85,11 @@ def main(argv=None) -> int:
     ap.add_argument("--dongs", help="wifi-api 행정동 목록(쉼표 구분)")
     a = ap.parse_args(argv)
     _export_keys()
+
+    if a.kind in ("juso-inspect", "geocode"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(json.dumps(_geocode_tools(a), ensure_ascii=False, indent=1, default=str))
+        return 0
 
     Base.metadata.create_all(engine)
     with SessionLocal() as db:

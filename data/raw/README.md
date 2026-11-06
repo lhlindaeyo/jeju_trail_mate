@@ -7,6 +7,9 @@
 | `hayoung_olle/` | 하영올레 SHP — 코스별 6개 파일 `hayoung-olle-course-N.{shp,shx,dbf,prj,cpg,qmd}` | 1·2·3코스 적재 완료 (8.84 / 5.87 / 6.23 km, 공시 8.4 / 5.8 / 6.2 km) |
 | `olle_course_status/` | 제주특별자치도_올레코스현황 CSV | 있음 (29개 코스, 기준일 2026-07-31) |
 | `poi/` | 공공와이파이 관광지 AP CSV, OpenAPI 활용가이드(HWP) 2종 | 있음 — 좌표는 OpenAPI로 받음 |
+| `juso_entrc/` | **도로명주소 위치정보 요약DB** 제주특별자치도 파일(.txt 또는 .zip) — 주소 → 좌표 변환용(공공누리 1유형, 출처표시) | 승인 대기. 받은 뒤 `python -m app.data_import juso-inspect`로 형식 확인 |
+
+받는 곳: <http://www.juso.go.kr/externalLink/goUrl.do?menuId=DT03> (로그인·본인인증·이용목적 심사). 주소기반산업지원서비스 > 주소정보 다운로드에서는 **"제공하는 주소(도형, 좌표)"** 쪽입니다("공개하는 주소(속성)"의 주소DB·건물DB에는 좌표가 없습니다).
 
 ## 적재
 
