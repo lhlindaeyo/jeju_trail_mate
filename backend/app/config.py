@@ -2,6 +2,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,10 +16,9 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'jeju_trail_mate.db').as_posix()}"
     cors_origins: str = "http://localhost:5173"
 
-    # Auth: dev tokens are signed with this secret. In production, set SUPABASE_JWT_SECRET
-    # and the API will verify Supabase-issued access tokens instead.
-    jwt_secret: str = "change-me-dev-secret-at-least-32-bytes-long"
-    supabase_jwt_secret: str | None = None
+    # Signs short-lived media links. (JWT_SECRET is accepted as the old name of the variable.)
+    signing_secret: str = Field(default="change-me-dev-secret-at-least-32-bytes-long",
+                                validation_alias=AliasChoices("SIGNING_SECRET", "JWT_SECRET"))
     admin_token: str | None = None  # required for /v1/admin/* (course & notice management)
 
     # AI. LLM_CHAIN (comma-separated, tried in order) wins over LLM_PROVIDER when set.

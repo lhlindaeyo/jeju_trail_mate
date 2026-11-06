@@ -33,21 +33,17 @@ def _reset_llm():
     llm_mod.set_llm(None)
 
 
-_counter = {"n": 0}
-
-
 @pytest.fixture
 def auth(client):
-    """Fresh user with all consents on; returns headers."""
-    _counter["n"] += 1
-    r = client.post("/v1/auth/dev-login", json={"email": f"user{_counter['n']}@example.com"})
-    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    client.patch("/v1/me/preferences", headers=h, json={
+    """Fresh local profile with all consents on. There is no sign-in, so the headers are empty;
+    the fixture is kept so tests read the same as before."""
+    client.delete("/v1/account/data")  # wipe the previous test's data; the next request recreates the user
+    client.patch("/v1/me/preferences", json={
         "consent_location": True, "consent_microphone": True, "consent_photos": True,
         "consent_ai_processing": True, "walk_start_time": "08:00", "walk_end_time": "18:00",
         "daily_distance_target_km": 20, "pace_kmh": 4.0, "rest_every_minutes": 90,
     })
-    return h
+    return {}
 
 
 def route_id(client, code: str, trail_type: str = "jeju_olle") -> str:

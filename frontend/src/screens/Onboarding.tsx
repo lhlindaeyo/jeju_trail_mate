@@ -1,26 +1,9 @@
 import { useState } from "react";
-import { api, auth } from "../api";
+import { markOnboarded } from "../api";
 import { PrefsForm } from "./Settings";
 
 export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
-  const [step, setStep] = useState<"intro" | "login" | "prefs">(auth.token ? "prefs" : "intro");
-  const [email, setEmail] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const login = async () => {
-    setErr("");
-    setBusy(true);
-    try {
-      const r = await api("/v1/auth/dev-login", { body: { email } });
-      auth.set(r.access_token);
-      setStep("prefs");
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [step, setStep] = useState<"intro" | "prefs">("intro");
 
   return (
     <div className="shell scroll" style={{ paddingTop: 32, paddingBottom: 40, overflowY: "auto" }}>
@@ -38,25 +21,14 @@ export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) 
             <div>이 앱은 구조·구급 서비스가 아닙니다. 위급할 때는 119에 연락하세요.</div>
             <div>JEJU TRAIL MATE는 사단법인 제주올레가 운영·보증하는 서비스가 아닙니다.</div>
           </div>
-          <button className="btn big" onClick={() => setStep("login")}>시작하기</button>
-        </div>
-      )}
-      {step === "login" && (
-        <div className="card">
-          <h2>로그인</h2>
-          <p className="muted small">개발용 이메일 로그인입니다. 운영 환경에서는 Supabase Auth로 대체됩니다.</p>
-          <label className="field">이메일
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" />
-          </label>
-          {err && <p className="err">{err}</p>}
-          <button className="btn big" onClick={login} disabled={busy || !email.includes("@")}>계속</button>
+          <button className="btn big" onClick={() => setStep("prefs")}>시작하기</button>
         </div>
       )}
       {step === "prefs" && (
         <div>
           <h1 className="title">걷기 스타일 알려주기</h1>
           <p className="muted">일정 추천과 알림에만 쓰이며 언제든 설정에서 바꾸거나 지울 수 있어요.</p>
-          <PrefsForm onSaved={onDone} submitLabel="저장하고 시작" />
+          <PrefsForm onSaved={async () => { markOnboarded(); await onDone(); }} submitLabel="저장하고 시작" />
         </div>
       )}
     </div>

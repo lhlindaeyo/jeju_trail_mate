@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Json = Record<string, any>;
 
-const TOKEN_KEY = "jtm.token";
 const QUEUE_KEY = "jtm.gpsQueue";
 
 function safeGet(k: string): string | null {
@@ -11,15 +10,15 @@ function safeSet(k: string, v: string | null) {
   try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* storage unavailable */ }
 }
 
-export const auth = {
-  get token() { return safeGet(TOKEN_KEY); },
-  set(t: string | null) { safeSet(TOKEN_KEY, t); },
-  async logout() {
-    safeSet(TOKEN_KEY, null);
-    safeSet(QUEUE_KEY, null);
-    try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
-  },
-};
+/** Forget everything stored on this device (used after the user erases their data). */
+export async function clearLocalData() {
+  for (const k of [QUEUE_KEY, "jtm.onboarded", "jtm.courseId", "jtm.tripId", "jtm.diaryWaypoint"]) safeSet(k, null);
+  try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
+}
+
+export const ONBOARDED_KEY = "jtm.onboarded";
+export const isOnboarded = () => safeGet(ONBOARDED_KEY) === "1";
+export const markOnboarded = () => safeSet(ONBOARDED_KEY, "1");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -27,7 +26,6 @@ export class ApiError extends Error {
 
 export async function api<T = Json>(path: string, opts: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
   const headers: Record<string, string> = {};
-  if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
@@ -37,7 +35,6 @@ export async function api<T = Json>(path: string, opts: { method?: string; body?
   } catch {
     throw new ApiError(0, "네트워크에 연결할 수 없습니다. 저장된 정보만 볼 수 있어요.");
   }
-  if (res.status === 401) { await auth.logout(); location.reload(); }
   if (res.status === 204) return undefined as T;
   const ctype = res.headers.get("content-type") ?? "";
   const data = ctype.includes("json") ? await res.json() : await res.text();

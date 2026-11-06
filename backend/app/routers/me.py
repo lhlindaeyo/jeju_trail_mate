@@ -1,28 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, get_or_create_user, issue_dev_token
-from ..config import get_settings
+from ..auth import current_user
 from ..db import get_db
 from ..models import User
 from .common import audit
 
-router = APIRouter(prefix="/v1", tags=["auth & profile"])
+router = APIRouter(prefix="/v1", tags=["profile"])
 
 HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
-
-
-class DevLogin(BaseModel):
-    email: str = Field(min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+$")
-
-
-@router.post("/auth/dev-login")
-def dev_login(body: DevLogin, db: Session = Depends(get_db)):
-    if get_settings().app_env == "production":
-        raise HTTPException(404, "not found")
-    user = get_or_create_user(db, email=body.email.lower())
-    return {"access_token": issue_dev_token(user), "token_type": "bearer", "user_id": user.id}
 
 
 class PreferencesIn(BaseModel):
@@ -49,7 +36,7 @@ class PreferencesIn(BaseModel):
 def prefs_to_dict(user: User) -> dict:
     p = user.preferences
     return {
-        "user_id": user.id, "email": user.email, "locale": user.locale,
+        "user_id": user.id, "locale": user.locale,
         "daily_distance_target_km": p.daily_distance_target_km, "pace_kmh": p.pace_kmh,
         "walk_start_time": p.walk_start_time, "walk_end_time": p.walk_end_time,
         "rest_every_minutes": p.rest_every_minutes, "interests": p.interests or [],

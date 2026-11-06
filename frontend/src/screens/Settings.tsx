@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, auth, type Json } from "../api";
+import { api, clearLocalData, type Json } from "../api";
 import { useApp } from "../App";
 
 const INTERESTS = ["바다", "오름", "숲", "카페", "문화", "마을", "일출", "풍경"];
@@ -103,10 +103,10 @@ export default function Settings() {
     URL.revokeObjectURL(url);
   };
   const deleteAll = async () => {
-    if (!confirm("계정과 모든 여행·일기·사진·책을 삭제합니다. 되돌릴 수 없어요. 계속할까요?")) return;
+    if (!confirm("모든 여행·일기·사진·책과 설정을 삭제합니다. 되돌릴 수 없어요. 계속할까요?")) return;
     const r = await api("/v1/account/data", { method: "DELETE" });
     setMsg(r.note);
-    await auth.logout();
+    await clearLocalData();
     location.reload();
   };
   const enableBrowserNotifications = async () => {
@@ -117,14 +117,13 @@ export default function Settings() {
 
   return (
     <div>
-      <p className="muted small">AI: {me.ai_provider === "mock" ? "오프라인 모드(도구 조회만)" : me.ai_provider} · {me.email}</p>
+      <p className="muted small">AI: {me.ai_provider === "mock" ? "오프라인 모드(도구 조회만)" : me.ai_provider}</p>
       <PrefsForm onSaved={refreshMe} />
       <div className="card stack">
         <h2>내 데이터</h2>
         <button className="btn secondary" onClick={enableBrowserNotifications}>브라우저 알림 허용</button>
         <button className="btn secondary" onClick={exportData}>데이터 내보내기 (JSON)</button>
-        <button className="btn ghost" onClick={async () => { await auth.logout(); location.reload(); }}>로그아웃</button>
-        <button className="btn danger" onClick={deleteAll}>계정 및 모든 데이터 삭제</button>
+        <button className="btn danger" onClick={deleteAll}>모든 데이터 삭제</button>
         {msg && <p className="muted">{msg}</p>}
       </div>
     </div>

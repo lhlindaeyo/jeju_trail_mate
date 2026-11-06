@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { api, auth, type Json } from "../api";
+import { api, type Json } from "../api";
 import { useApp } from "../App";
 import Plan from "./Plan";
 import Settings from "./Settings";
@@ -33,8 +33,7 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
         <button onClick={() => openSheet("settings")}><div>설정·동의<span>걷기 속도·종료 시각, 위치·사진·AI 동의, 알림</span></div>›</button>
         <button onClick={() => openSheet("sources")}><div>데이터 출처<span>제주데이터허브·공공데이터 기준일과 이용 조건</span></div>›</button>
       </div>
-      <p className="note">{me.email} · AI {me.ai_provider === "mock" ? "오프라인 모드" : me.ai_provider}</p>
-      <button className="go" onClick={async () => { await auth.logout(); location.reload(); }}>로그아웃</button>
+      <p className="note">AI {me.ai_provider === "mock" ? "오프라인 모드" : me.ai_provider}</p>
       <p className="note">JEJU TRAIL MATE는 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아닙니다. 이 앱은 구조·구급 서비스가 아닙니다.</p>
     </Frame>
   );
@@ -96,7 +95,7 @@ function BookSheet() {
   const approve = () => run(() => api(`/v1/books/${book!.id}/approve`, { method: "POST" }));
   const download = async () => {
     try {
-      const res = await fetch(`/v1/books/${book!.id}/export`, { headers: { Authorization: `Bearer ${auth.token}` } });
+      const res = await fetch(`/v1/books/${book!.id}/export`);
       if (!res.ok) throw new Error((await res.json()).detail);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

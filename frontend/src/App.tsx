@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, auth, gpsQueue, type Json } from "./api";
+import { api, gpsQueue, isOnboarded, type Json } from "./api";
+import Splash from "./screens/Splash";
 import Onboarding from "./screens/Onboarding";
 import Home from "./screens/Home";
 import Explore from "./screens/Explore";
@@ -14,6 +15,8 @@ const TRIP_KEY = "jtm.tripId";
 const JEJU_BOUNDS = { minLat: 33.0, maxLat: 33.7, minLon: 126.0, maxLon: 127.0 };
 const MIN_POINT_INTERVAL_MS = 15_000;
 const FLUSH_INTERVAL_MS = 60_000;
+const SPLASH_MIN_MS = 1800; // how long the splash stays at least, even when data is ready sooner
+const SPLASH_FADE_MS = 900; // must match the splash exit animation in styles.css
 
 export type Position = { lat: number; lon: number; acc: number; onIsland: boolean };
 
@@ -53,7 +56,10 @@ const NAV_LABEL: Record<Page, string> = { home: "홈", explore: "코스탐색", 
 
 export default function App() {
   const [me, setMe] = useState<Json | null>(null);
-  const [loading, setLoading] = useState(Boolean(auth.token));
+  const [loading, setLoading] = useState(true);
+  const [onboarded, setOnboarded] = useState(isOnboarded);
+  const [splash, setSplash] = useState<"show" | "leaving" | "gone">("show");
+  const [splashMinDone, setSplashMinDone] = useState(false);
   const [page, setPage] = useState<Page>(pageFromHash);
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const [trips, setTrips] = useState<Json[]>([]);
@@ -74,11 +80,23 @@ export default function App() {
   const refreshMe = useCallback(async () => setMe(await api("/v1/me")), []);
   const refreshTrips = useCallback(async () => setTrips((await api("/v1/trips")).trips), []);
 
-  useEffect(() => {
-    if (!auth.token) return;
-    Promise.all([refreshMe(), refreshTrips(), api("/v1/sessions/current").then((r) => setSession(r.session))])
-      .catch(() => undefined).finally(() => setLoading(false));
+  const load = useCallback(() => {
+    return Promise.all([refreshMe(), refreshTrips(), api("/v1/sessions/current").then((r) => setSession(r.session))])
+      .catch(() => undefined).finally(() => setLoading(false)); // on failure `me` stays null → retry screen
   }, [refreshMe, refreshTrips]);
+  useEffect(() => { load(); }, [load]);
+
+  // Splash: stay at least SPLASH_MIN_MS and until the first data load is done, then fade into the app.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSplashMinDone(true), SPLASH_MIN_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (splash === "show" && splashMinDone && !loading) setSplash("leaving");
+    if (splash !== "leaving") return;
+    const t = window.setTimeout(() => setSplash("gone"), SPLASH_FADE_MS);
+    return () => window.clearTimeout(t);
+  }, [splash, splashMinDone, loading]);
 
   // hash ⇄ page (back/forward and reload keep the selected tab)
   useEffect(() => {
@@ -185,16 +203,13 @@ export default function App() {
     if (id === "open_notice" && n.source?.url) window.open(n.source.url, "_blank", "noopener");
   };
 
-  if (loading) return <div className="shell"><p className="sub" style={{ padding: 40 }}>불러오는 중…</p></div>;
-  if (!me) return <Onboarding onDone={async () => { await refreshMe(); await refreshTrips(); }} />;
-
-  const ctx: Ctx = {
+  const ctx: Ctx | null = me && {
     me, refreshMe, trips, trip, setTripId, refreshTrips, session, setSession, course, setCourseId, refreshCourse,
     go, openSheet: setSheet, toast, pushNotifications, notifications, locOn, setLocOn, pos, locMsg, flushGps,
   };
   const Screen = { home: Home, explore: Explore, ai: Companion, diary: Diary }[page];
 
-  return (
+  const app = ctx && (
     <AppCtx.Provider value={ctx}>
       <div className="shell" data-page={page}>
         <div className={page === "home" ? "page" : "page scroll"}><Screen /></div>
@@ -226,5 +241,30 @@ export default function App() {
         {sheet && sheet !== "menu" && <Sheet name={sheet} onClose={() => setSheet(null)} />}
       </div>
     </AppCtx.Provider>
+  );
+
+  let body: ReactNode;
+  if (loading) {
+    body = <div className="shell" />;
+  } else if (!me) {
+    body = (
+      <div className="shell scroll">
+        <h1 className="title">서버에 연결할 수 없어요</h1>
+        <p className="sub">백엔드가 켜져 있는지 확인한 뒤 다시 시도해 주세요.</p>
+        <button className="btn big" onClick={() => { setLoading(true); load(); }}>다시 시도</button>
+      </div>
+    );
+  } else if (!onboarded && trips.length === 0) {
+    // first launch: short intro + walking preferences (no account step — the app is single-user)
+    body = <Onboarding onDone={async () => { await refreshMe(); await refreshTrips(); setOnboarded(true); }} />;
+  } else {
+    body = app;
+  }
+
+  return (
+    <>
+      {body}
+      {splash !== "gone" && <Splash leaving={splash === "leaving"} fadeMs={SPLASH_FADE_MS} />}
+    </>
   );
 }

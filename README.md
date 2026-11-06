@@ -50,7 +50,7 @@ python -m venv .venv
 
 ```ini
 APP_ENV=development
-JWT_SECRET=<긴 임의 문자열>
+SIGNING_SECRET=<긴 임의 문자열>      # 사진·책 다운로드 링크 서명용 (로그인 기능은 없습니다)
 ADMIN_TOKEN=<긴 임의 문자열>
 LLM_CHAIN=ollama,mock          # AI: Ollama(qwen3:4b) → 없으면 오프라인 mock
 KMA_SERVICE_KEY=               # 공공데이터포털 일반 인증키: 기상청 단기예보

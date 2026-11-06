@@ -1,9 +1,9 @@
 // Minimal offline support: cache the app shell; API GETs fall back to the last cached copy.
-const SHELL = "jtm-shell-v1";
+const SHELL = "jtm-shell-v2";
 const API = "jtm-api-v1";
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/index.html", "/manifest.webmanifest", "/icon.svg"])));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/index.html", "/manifest.webmanifest", "/icon.svg", "/splash.webp"])));
   self.skipWaiting();
 });
 

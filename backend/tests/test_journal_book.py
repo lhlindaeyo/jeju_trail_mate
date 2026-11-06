@@ -67,10 +67,8 @@ def test_book_lifecycle(client, auth):
     assert r.status_code == 200 and (r.headers["content-type"].startswith("application/pdf") or r.headers.get("x-pdf-engine") == "browser-print")
 
 
-def test_account_delete_removes_everything(client):
-    tok = client.post("/v1/auth/dev-login", json={"email": "bye@example.com"}).json()["access_token"]
-    h = {"Authorization": f"Bearer {tok}"}
-    client.patch("/v1/me/preferences", headers=h, json={"consent_photos": True})
+def test_account_delete_removes_everything(client, auth):
+    h = auth
     trip = make_trip(client, h)
     e = client.post("/v1/journals", headers=h, json={"trip_id": trip, "text": "x"}).json()
     url = client.post(f"/v1/journals/{e['id']}/media", headers=h, files={"file": ("a.png", PNG, "image/png")}).json()["media"][0]["url"]
@@ -78,4 +76,6 @@ def test_account_delete_removes_everything(client):
     r = client.delete("/v1/account/data", headers=h).json()
     assert r["deleted"] and r["files_removed"] >= 1
     assert client.get(url).status_code == 404
-    assert client.get("/v1/me", headers=h).status_code == 401
+    # the local profile starts over: defaults, no trips
+    assert client.get("/v1/me", headers=h).json()["consents"]["location"] is False
+    assert client.get("/v1/trips", headers=h).json()["trips"] == []

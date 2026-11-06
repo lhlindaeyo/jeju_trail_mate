@@ -89,7 +89,7 @@ def get_file(key: str, exp: int, sig: str):
     return Response(data, media_type=ctype, headers={"Cache-Control": "private, max-age=60", "X-Content-Type-Options": "nosniff"})
 
 
-# --- account data rights -------------------------------------------------------------
+# --- data rights (single local user) -------------------------------------------------------------
 
 
 @router.get("/account/export", tags=["account"])
@@ -118,14 +118,14 @@ def export_data(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @router.delete("/account/data", tags=["account"])
 def delete_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Deletes DB rows (cascade), media, generated books. Backups expire per retention policy."""
+    """Erases the local user's rows (cascade), media and generated books. The next request starts a fresh profile."""
     files = storage.delete_prefix(user.id)
     uid = user.id
     db.delete(user)
     db.add(AuditEvent(user_id=uid, event_type="account_deleted", resource_type="user", resource_id=uid))
     db.commit()
     return {"deleted": True, "files_removed": files,
-            "note": "백업 사본은 보존 정책에 따라 최대 30일 내 만료됩니다."}
+            "note": "이 기기에 저장된 여행·일기·사진·책을 모두 삭제했어요."}
 
 
 # --- admin: verified course data & notices (spec §02 데이터 갱신 전략) ---------------

@@ -22,7 +22,7 @@
 - [ ] (선택) 브이월드 키 → `VWORLD_API_KEY`·`VWORLD_DOMAIN` — 남은 경유지 이름의 위치를 "제안"으로 확인(저장 불가 약관). 최종 좌표는 현장 GPS로 확정
 - [ ] (선택) 무료 LLM 키(Gemini/Groq 등) → `.env`의 `*_API_KEY`, `LLM_CHAIN` 순서 지정. 센터 PC는 Ollama(`qwen3:4b`) + `docker-compose.yml`
 - [ ] 센터 PC(i7-8700/GTX 1060/32GB)와 같은 사양에서 `qwen3:4b` vs `8b` 응답 시간·한국어 도구 호출 정확도 측정
-- [ ] `JWT_SECRET`, `ADMIN_TOKEN`을 긴 임의 문자열로 변경
+- [ ] `SIGNING_SECRET`(구 JWT_SECRET), `ADMIN_TOKEN`을 긴 임의 문자열로 변경
 
 ## 3. 출시 전 결정·확인
 
@@ -32,7 +32,7 @@
 - [ ] 지도 SDK(카카오/네이버) 도보 경로·캐싱·상업 이용 조건 확인 후 키 발급
 - [ ] 하영올레 vs 제주올레 구분 표기 최종 확인, 로고·브랜딩 미사용 확인
 - [ ] 개인정보 처리방침·이용약관, 위치정보 관련 법률 검토
-- [ ] 운영 인프라(Supabase 등), 푸시(FCM/APNs)
+- [ ] 운영 인프라, 사용자 인증(현재는 로그인 없는 단일 사용자 모드), 푸시(FCM/APNs)
 
 ## 4. 현장 테스트 (8주 차)
 

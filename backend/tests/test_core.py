@@ -53,13 +53,9 @@ def test_plan_respects_end_time(client, auth):
     assert d["route"] is None and "맞는 코스가 없어" in d["note"]
 
 
-def test_other_users_cannot_read(client, auth):
-    trip = make_trip(client, auth)
-    other = client.post("/v1/auth/dev-login", json={"email": "intruder@example.com"}).json()["access_token"]
-    oh = {"Authorization": f"Bearer {other}"}
-    assert client.get(f"/v1/trips/{trip}", headers=oh).status_code == 404
-    assert client.post(f"/v1/trips/{trip}/plan", headers=oh, json={}).status_code == 404
-    assert client.get("/v1/trips", headers={"Authorization": "Bearer garbage"}).status_code == 401
+def test_no_login_required(client, auth):
+    assert client.get("/v1/me").status_code == 200
+    assert client.post("/v1/auth/dev-login", json={"email": "a@b.c"}).status_code in (404, 405)
 
 
 def test_gps_requires_consent_and_manual_fallback(client, auth):

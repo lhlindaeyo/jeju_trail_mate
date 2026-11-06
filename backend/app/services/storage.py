@@ -64,14 +64,14 @@ class LocalStorage:
 def sign(key: str, ttl: int | None = None) -> dict:
     s = get_settings()
     exp = int(time.time()) + (ttl or s.signed_url_ttl_seconds)
-    sig = hmac.new(s.jwt_secret.encode(), f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()
+    sig = hmac.new(s.signing_secret.encode(), f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()
     return {"key": key, "exp": exp, "sig": sig}
 
 
 def verify(key: str, exp: int, sig: str) -> bool:
     if exp < time.time():
         return False
-    expected = hmac.new(get_settings().jwt_secret.encode(), f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(get_settings().signing_secret.encode(), f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sig)
 
 
