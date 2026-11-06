@@ -12,7 +12,6 @@ storage/
 backend/storage/
 .env
 .env.*
-!.env.example
 
 # Node
 node_modules/

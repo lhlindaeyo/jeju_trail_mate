@@ -43,9 +43,23 @@
 cd backend
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt      # macOS/Linux: .venv/bin/pip
-cp .env.example .env
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 ```
+
+`backend/.env`는 git에 올라가지 않는 파일이라 직접 만듭니다(없어도 실행은 되고 키가 필요한 기능만 꺼집니다). 최소 예:
+
+```ini
+APP_ENV=development
+JWT_SECRET=<긴 임의 문자열>
+ADMIN_TOKEN=<긴 임의 문자열>
+LLM_CHAIN=ollama,mock          # AI: Ollama(qwen3:4b) → 없으면 오프라인 mock
+KMA_SERVICE_KEY=               # 공공데이터포털 일반 인증키: 기상청 단기예보
+SBIZ_SERVICE_KEY=              # 같은 포털: 소상공인 상가정보 (sbiz-fetch)
+JEJU_DATAHUB_APPKEY=           # 제주데이터허브 프로젝트키
+GEOCODER_CHAIN=local,stores
+```
+
+그 밖의 설정(Gemini·Groq 등 LLM, 브이월드·카카오, DB 주소 등)은 `backend/app/config.py`의 필드 이름을 대문자로 쓰면 됩니다.
 
 ```bash
 cd frontend
@@ -77,7 +91,7 @@ cd backend
 
 ### 키가 없을 때
 
-- LLM 제공사는 `LLM_CHAIN`(예: `ollama,gemini,mock`)으로 순서를 정하고, 한도·장애 시 다음으로 넘어갑니다. 키가 없는 항목은 건너뛰고, API 키는 쉼표로 여러 개 넣으면 돌려 씁니다. 로컬 모델(Ollama)은 `OLLAMA_MODEL`, 센터 PC용은 `docker-compose.yml`. 설정 방법은 `backend/.env.example`.
+- LLM 제공사는 `LLM_CHAIN`(예: `ollama,gemini,mock`)으로 순서를 정하고, 한도·장애 시 다음으로 넘어갑니다. 키가 없는 항목은 건너뛰고, API 키는 쉼표로 여러 개 넣으면 돌려 씁니다. 로컬 모델(Ollama)은 `OLLAMA_MODEL`, 센터 PC용은 `docker-compose.yml`. 설정 이름은 `backend/app/config.py`.
 - 아무것도 없으면(`ANTHROPIC_API_KEY`·`LLM_CHAIN` 없음) → 오프라인 모드(키워드로 도구 조회 결과만 답함).
 - `KMA_SERVICE_KEY` 없음 → "예보 확인 필요", 비 알림 꺼짐.
 - 주소 → 좌표 변환기(`GEOCODER_CHAIN`: `local`=위치정보 요약DB, `stores`=상가정보·인허가 업소 목록과 상호·주소 매칭, `vworld`, `kakao`)가 하나도 없으면 착한가격업소 등 주소만 있는 장소는 "주소 기준 목록"으로만 안내. 브이월드·카카오(기본 설정)는 약관상 결과 저장이 안 되어 보고서의 "제안"으로만 나오고 DB에는 쓰지 않습니다. 확인: `python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"`.
