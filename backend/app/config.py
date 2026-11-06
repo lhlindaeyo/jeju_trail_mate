@@ -2,7 +2,6 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,9 +15,6 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'jeju_trail_mate.db').as_posix()}"
     cors_origins: str = "http://localhost:5173"
 
-    # Signs short-lived media links. (JWT_SECRET is accepted as the old name of the variable.)
-    signing_secret: str = Field(default="change-me-dev-secret-at-least-32-bytes-long",
-                                validation_alias=AliasChoices("SIGNING_SECRET", "JWT_SECRET"))
     admin_token: str | None = None  # required for /v1/admin/* (course & notice management)
 
     # AI. LLM_CHAIN (comma-separated, tried in order) wins over LLM_PROVIDER when set.
@@ -60,11 +56,6 @@ class Settings(BaseSettings):
     vworld_domain: str | None = None  # 키 발급 때 등록한 도메인
     kakao_rest_api_key: str | None = None  # 선택: 주소/장소명 → 좌표
     kakao_storable: bool = False  # 카카오 약관상 결과 저장이 허용됨을 확인한 경우에만 true
-
-    # Storage
-    storage_dir: str = str(BACKEND_DIR / "storage")
-    signed_url_ttl_seconds: int = 300
-    max_upload_mb: int = 15
 
     # Rules engine thresholds
     delay_threshold_ratio: float = 0.15

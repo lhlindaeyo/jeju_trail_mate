@@ -5,7 +5,7 @@ import { listen, voiceSupported } from "../voice";
 
 type Msg = { role: "me" | "ai"; text: string; meta?: Json };
 const QUICK: [string, string][] = [
-  ["근처 맛집", "근처 맛집 알려줘"], ["남은 시간", "도착까지 남은 시간은?"], ["쉬어갈 곳", "근처에 쉬어갈 곳 있어?"],
+  ["앞길 브리핑", "앞길 브리핑 알려줘"], ["근처 맛집", "근처 맛집 알려줘"], ["남은 시간", "도착까지 남은 시간은?"], ["쉬어갈 곳", "근처에 쉬어갈 곳 있어?"],
   ["다음 경유지", "다음 경유지까지 얼마나 남았어?"], ["공지 확인", "오늘 코스 우회 공지 있어?"], ["날씨", "지금 날씨 어때?"],
 ];
 const ICON: Record<string, string> = {
@@ -84,7 +84,7 @@ export default function Companion() {
             <p>{n.message}</p>
             <div className="row wrap">
               <span className={`badge ${n.severity === "safety" ? "safety" : "gray"}`}>{ago(n.created_at)}{n.severity === "safety" ? " · 안전" : ""}</span>
-              {n.event_type === "waypoint_arrival" && <button className="go" onClick={() => go("diary")}>사진 남기기</button>}
+              {n.event_type === "waypoint_arrival" && <button className="go" onClick={() => go("brief")}>앞길 보기</button>}
             </div>
           </div>
         </div>

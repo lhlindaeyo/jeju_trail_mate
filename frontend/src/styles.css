@@ -153,20 +153,28 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .alert b { font-size: 14px; }
 .alert p { margin: 2px 0 6px; font-size: 13px; line-height: 1.5; color: #45554f; white-space: pre-wrap; }
 
-/* Diary */
-.photo { display: block; width: 100%; aspect-ratio: 16/11; border-radius: 16px; background: #e2eae7; overflow: hidden; position: relative; margin-bottom: 12px; cursor: pointer; }
-.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo .ph { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 6px; color: #5d6d67; font-size: 13px; font-weight: 600; }
-.photo .ph svg { width: 30px; height: 30px; stroke: #5d6d67; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-textarea.diary { width: 100%; border: 0; border-radius: 16px; padding: 14px 16px; font-size: 15px; line-height: 1.55; resize: none; height: 104px;
-  background: #fff; box-shadow: var(--shadow-soft); }
-textarea.long { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-height: 160px; resize: vertical; background: #fff; }
-.meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 4px 12px; }
-.entry { display: flex; gap: 12px; }
-.entry img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; background: #e2eae7; }
-.entry p { margin: 2px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-line; }
-.entry .d { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-.entry .del { font-size: 11px; color: var(--danger); font-weight: 700; }
+/* Brief (앞길 브리핑) */
+.lead { margin: 8px 0 12px; font-size: 14px; line-height: 1.55; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats > div { background: #f0f4f2; border-radius: 12px; padding: 10px 8px; text-align: center; }
+.stats span { display: block; font-size: 11px; color: var(--muted); }
+.stats b { display: block; font-size: 18px; letter-spacing: -.01em; }
+.daylight { border-left: 4px solid var(--teal); }
+.daylight.tight { border-left-color: #e0a100; }
+.daylight.late { border-left-color: var(--danger); }
+.badge.st-ok { background: var(--teal-soft); color: var(--teal-ink); }
+.badge.st-tight { background: var(--warn-soft); color: var(--warn-ink); }
+.badge.st-late { background: var(--danger); color: #fff; }
+.supply h3 { font-size: 12px; color: var(--muted); margin: 12px 0 4px; font-weight: 700; }
+.supply .none { margin: 0; font-size: 12px; color: var(--muted); }
+.place { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.place .where { flex: 0 0 62px; font-size: 12px; font-weight: 800; color: var(--teal-ink); }
+.place b { font-weight: 600; }
+.place i { display: block; font-style: normal; font-size: 11px; color: var(--muted); }
+.hours { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.hours > div { background: #f0f4f2; border-radius: 12px; padding: 8px 4px; text-align: center; font-size: 11px; color: var(--muted); display: grid; gap: 2px; }
+.hours > div b { font-size: 16px; color: var(--ink); }
+.hours > div.wet { background: var(--teal-soft); color: var(--teal-ink); }
 
 /* toasts & sheets */
 .toasts { position: absolute; left: 12px; right: 12px; top: 10px; z-index: 1500; display: grid; gap: 8px; }
@@ -189,7 +197,6 @@ textarea.long { width: 100%; border: 1px solid var(--line); border-radius: 12px;
 .day { border-left: 3px solid var(--line); padding-left: 12px; margin: 14px 0; }
 .day.approved { border-left-color: var(--teal); }
 .day.pending { border-left-color: var(--yellow); }
-iframe.preview { width: 100%; height: 60vh; border: 0; border-radius: 16px; background: #fff; box-shadow: var(--shadow-soft); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* compatibility helpers used by settings / onboarding */

@@ -15,7 +15,7 @@ from ..services.geo import KST, as_utc, haversine_m, hhmm_to_minutes, sunset_kst
 from ..services.tracking_service import OFF_ROUTE_M, ROUTE_MATCH_ACCURACY_M, progress_summary, route_progress
 
 EVENT_TYPES = ["waypoint_arrival", "off_route", "endpoint_near", "schedule_delay", "rest_reminder", "end_time_risk",
-               "route_notice", "notice_unverified", "weather", "journal_prompt"]
+               "route_notice", "notice_unverified", "weather"]
 OFF_ROUTE_SUSTAIN = timedelta(minutes=2)
 ENDPOINT_NEAR_M = 150.0
 RAIN_PROB_THRESHOLD = 60
@@ -42,8 +42,7 @@ ACT_REPLAN = {"id": "replan", "label": "일정 다시 계산"}
 ACT_LATER = {"id": "later", "label": "나중에"}
 ACT_SNOOZE = {"id": "snooze_today", "label": "오늘은 그만"}
 ACT_NOTICE = {"id": "open_notice", "label": "공지 원문 열기"}
-ACT_JOURNAL = {"id": "open_journal", "label": "기록하기"}
-ACT_PHOTO = {"id": "open_journal", "label": "사진 남기기"}
+ACT_BRIEF = {"id": "open_brief", "label": "앞길 보기"}
 
 
 def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | None = None, *, weather: dict | None = None) -> list[Event]:
@@ -57,10 +56,6 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
     gps_ok = summary["gps_quality"] != "poor" and not summary["gps_stale"]
     events: list[Event] = []
 
-    if session.status == "ended":
-        events.append(Event("journal_prompt", "journal_prompt", "info", "오늘의 기록",
-                            "오늘 기억하고 싶은 순간이 있나요? 한 줄이나 음성으로 남겨 보세요.", [ACT_JOURNAL, ACT_LATER]))
-        return events
     if session.status != "active":
         return events
 
@@ -77,7 +72,7 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
             events.append(Event("notice_unverified", f"notice_unverified:{route.id}", "info", "공지 최신 확인 필요",
                                 payload["caveat"], [ACT_NOTICE, ACT_LATER], {"url": payload["official_url"]}))
 
-        # 1b) Waypoint check-ins (routes with located waypoints) → offer a photo/diary entry.
+        # 1b) Waypoint check-ins (routes with located waypoints) → point to the road ahead.
         for v in sorted(session.visits, key=lambda v: as_utc(v.arrived_at)):
             w = v.waypoint
             if w.kind == "S":
@@ -85,9 +80,9 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
             done = w.kind == "F"
             events.append(Event("waypoint_arrival", f"waypoint:{w.id}", "info",
                                 "코스 완주 지점 도착" if done else f"경유지 도착 · {w.name}",
-                                (f"{route.name}의 도착 지점이에요. 오늘 걸은 길을 기록해 볼까요?" if done
-                                 else f"{w.name} 근처예요. 사진을 남기고 일기에 연결할까요?"),
-                                [{**ACT_PHOTO, "waypoint_id": w.id}, ACT_LATER],
+                                (f"{route.name}의 도착 지점이에요. 수고하셨어요." if done
+                                 else f"{w.name} 근처예요. 앞길의 일몰 여유와 쉴 곳을 확인해 보세요."),
+                                [ACT_LATER] if done else [ACT_BRIEF, ACT_LATER],
                                 {"waypoint": w.name, "data": "하영올레 SHP (제주데이터허브)"}))
 
         # 1c) Possible deviation — only with good fixes, sustained, phrased as "위치 확인".
@@ -103,8 +98,8 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
             d = haversine_m(session.last_lat, session.last_lon, route.end_lat, route.end_lon)
             if d <= ENDPOINT_NEAR_M:
                 events.append(Event("endpoint_near", f"endpoint:{route.id}", "info", "종점 근처",
-                                    f"{route.end_point} 근처(약 {round(d)}m)예요. 기록을 남기고 세션을 마칠까요?",
-                                    [ACT_JOURNAL, ACT_LATER]))
+                                    f"{route.end_point} 근처(약 {round(d)}m)예요. 도착했다면 걷기를 마쳐 주세요.",
+                                    [ACT_MAP, ACT_LATER]))
 
     # 2) Schedule delay — only when GPS is trustworthy (spec guardrail).
     exp, act = summary["expected_progress"], summary["actual_progress"]

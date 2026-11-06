@@ -12,7 +12,7 @@ function safeSet(k: string, v: string | null) {
 
 /** Forget everything stored on this device (used after the user erases their data). */
 export async function clearLocalData() {
-  for (const k of [QUEUE_KEY, "jtm.onboarded", "jtm.courseId", "jtm.tripId", "jtm.diaryWaypoint"]) safeSet(k, null);
+  for (const k of [QUEUE_KEY, "jtm.onboarded", "jtm.courseId", "jtm.tripId"]) safeSet(k, null);
   try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
 }
 

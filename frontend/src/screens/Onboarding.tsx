@@ -10,14 +10,14 @@ export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) 
       {step === "intro" && (
         <div className="stack">
           <div className="brand">JEJU TRAIL MATE</div>
-          <h1 className="title">제주를 걷는 동안엔 믿음직한 동행자,<br />여행이 끝나면 나만의 이야기책.</h1>
+          <h1 className="title">제주를 걷는 동안엔<br />믿음직한 길동무.</h1>
           <div className="card stack">
             <div><strong>PLAN</strong> · 기간·체력·귀환 시각에 맞춘 코스 일정 초안 (승인해야 확정)</div>
             <div><strong>WALK</strong> · 하영올레는 경유지 도착·경로 이탈까지, 제주올레는 거리·공지·일몰 알림</div>
-            <div><strong>REMEMBER</strong> · 사진 한 장과 세 줄 일기, 완주한 마지막 날 디지털 책</div>
+            <div><strong>AHEAD</strong> · 앞길 브리핑: 일몰 전 도착 여부, 앞쪽 화장실·식당, 앞 6시간 날씨</div>
           </div>
           <div className="card muted small stack">
-            <div>위치·마이크·사진 권한은 처음부터 요구하지 않고, 해당 기능을 쓰는 순간에 목적을 설명하고 요청합니다.</div>
+            <div>위치·마이크 권한은 처음부터 요구하지 않고, 해당 기능을 쓰는 순간에 목적을 설명하고 요청합니다.</div>
             <div>이 앱은 구조·구급 서비스가 아닙니다. 위급할 때는 119에 연락하세요.</div>
             <div>JEJU TRAIL MATE는 사단법인 제주올레가 운영·보증하는 서비스가 아닙니다.</div>
           </div>

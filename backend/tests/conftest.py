@@ -4,7 +4,6 @@ import tempfile
 _tmp = tempfile.mkdtemp(prefix="jtm-test-")
 os.environ.update({
     "DATABASE_URL": f"sqlite:///{_tmp}/test.db",
-    "STORAGE_DIR": f"{_tmp}/storage",
     "LLM_PROVIDER": "mock",
     "LLM_CHAIN": "",  # a developer's .env may set a chain; tests always run offline on the mock
     "ADMIN_TOKEN": "test-admin",
@@ -39,7 +38,7 @@ def auth(client):
     the fixture is kept so tests read the same as before."""
     client.delete("/v1/account/data")  # wipe the previous test's data; the next request recreates the user
     client.patch("/v1/me/preferences", json={
-        "consent_location": True, "consent_microphone": True, "consent_photos": True,
+        "consent_location": True, "consent_microphone": True,
         "consent_ai_processing": True, "walk_start_time": "08:00", "walk_end_time": "18:00",
         "daily_distance_target_km": 20, "pace_kmh": 4.0, "rest_every_minutes": 90,
     })

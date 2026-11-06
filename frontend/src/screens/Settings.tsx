@@ -10,7 +10,6 @@ const NOTIFY_TYPES: [string, string][] = [
   ["rest_reminder", "휴식 제안"],
   ["weather", "비 예보"],
   ["notice_unverified", "공지 최신 확인 필요"],
-  ["journal_prompt", "기록 제안"],
 ];
 
 export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () => void | Promise<void>; submitLabel?: string }) {
@@ -34,9 +33,9 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
         body: {
           daily_distance_target_km: Number(p.daily_distance_target_km), pace_kmh: Number(p.pace_kmh),
           walk_start_time: p.walk_start_time, walk_end_time: p.walk_end_time, rest_every_minutes: Number(p.rest_every_minutes),
-          interests: p.interests, journal_style: p.journal_style || null, notification_settings: p.notification_settings,
+          interests: p.interests, notification_settings: p.notification_settings,
           consent_ai_processing: p.consents.ai_processing, consent_memory: p.consents.memory,
-          consent_location: p.consents.location, consent_microphone: p.consents.microphone, consent_photos: p.consents.photos,
+          consent_location: p.consents.location, consent_microphone: p.consents.microphone,
         },
       });
       setMsg("저장했어요.");
@@ -59,21 +58,18 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
         <div className="chips">
           {INTERESTS.map((i) => <button key={i} className={`chip ${p.interests.includes(i) ? "on" : ""}`} onClick={() => toggleInterest(i)} aria-pressed={p.interests.includes(i)}>{i}</button>)}
         </div>
-        <label className="field">일기 문체(선택)<input type="text" maxLength={200} value={p.journal_style ?? ""} onChange={(e) => set("journal_style", e.target.value)} placeholder="예: 담백하고 짧게" /></label>
       </div>
 
       <div className="card">
         <h2>동의 (각각 철회 가능)</h2>
         <label className="toggle"><input type="checkbox" checked={p.consents.ai_processing} onChange={(e) => setConsent("ai_processing", e.target.checked)} />
-          <span><strong>AI 처리</strong><br /><span className="muted small">질문·일기 기록을 외부 AI(Anthropic Claude)로 보내 답변과 초안을 만듭니다. 원시 GPS 기록은 보내지 않습니다.</span></span></label>
+          <span><strong>AI 처리</strong><br /><span className="muted small">질문과 현재 코스 상황을 외부 AI(Anthropic Claude)로 보내 답변을 만듭니다. 원시 GPS 기록은 보내지 않습니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.memory} onChange={(e) => setConsent("memory", e.target.checked)} />
-          <span><strong>개인화 기억</strong><br /><span className="muted small">관심사·문체를 AI 맥락에 사용합니다. 끄면 저장된 관심사·문체가 삭제됩니다.</span></span></label>
+          <span><strong>개인화 기억</strong><br /><span className="muted small">관심사를 AI 맥락에 사용합니다. 끄면 저장된 관심사가 삭제됩니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.location} onChange={(e) => setConsent("location", e.target.checked)} />
           <span><strong>위치 기록</strong><br /><span className="muted small">트레킹 세션을 시작했을 때만 위치를 기록합니다. 원시 위치는 세션 종료 30일 후 삭제됩니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.microphone} onChange={(e) => setConsent("microphone", e.target.checked)} />
-          <span><strong>음성 기록</strong><br /><span className="muted small">음성 메모를 글로 바꿉니다. 브라우저 음성 인식은 기기 제조사(구글·애플) 서버에서 처리될 수 있습니다.</span></span></label>
-        <label className="toggle"><input type="checkbox" checked={p.consents.photos} onChange={(e) => setConsent("photos", e.target.checked)} />
-          <span><strong>사진 저장</strong><br /><span className="muted small">일기에 첨부한 사진을 비공개 저장소에 보관합니다.</span></span></label>
+          <span><strong>음성 질문</strong><br /><span className="muted small">AI 동행자에게 말로 질문합니다. 브라우저 음성 인식은 기기 제조사(구글·애플) 서버에서 처리될 수 있습니다.</span></span></label>
       </div>
 
       <div className="card">
@@ -103,7 +99,7 @@ export default function Settings() {
     URL.revokeObjectURL(url);
   };
   const deleteAll = async () => {
-    if (!confirm("모든 여행·일기·사진·책과 설정을 삭제합니다. 되돌릴 수 없어요. 계속할까요?")) return;
+    if (!confirm("모든 여행·이동 기록과 설정을 삭제합니다. 되돌릴 수 없어요. 계속할까요?")) return;
     const r = await api("/v1/account/data", { method: "DELETE" });
     setMsg(r.note);
     await clearLocalData();

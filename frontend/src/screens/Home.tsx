@@ -141,7 +141,7 @@ export default function Home() {
     try {
       const r = await api(`/v1/sessions/${session!.session_id}/${action}`, { method: "POST" });
       setSession(r); pushNotifications(r.notifications);
-      if (action === "end") { gpsQueue.clear(); toast("수고했어요! 오늘의 일기를 남겨 보세요"); }
+      if (action === "end") { gpsQueue.clear(); toast("수고했어요! 오늘 걷기를 마쳤어요"); }
     } catch (e) { toast((e as Error).message); }
   };
   const refresh = async () => {

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from datetime import date as _date
 
 from sqlalchemy.orm import Session
 
 from ..models import AgentProposal, TrackingSession, Trip, User
-from ..services import poi_service, route_service, schedule_service, weather_service
-from ..services import journal_service
+from ..services import brief_service, poi_service, route_service, schedule_service, weather_service
 from ..services.geo import JEJU_CENTER, now_kst
 from ..services.tracking_service import progress_summary, route_progress
 from .llm import ToolSpec
@@ -79,9 +77,9 @@ TOOLS: list[ToolSpec] = [
         },
         "required": ["reason", "changes"],
     }),
-    ToolSpec("create_journal_draft", "사용자가 남긴 기록만으로 해당 날짜의 일기 초안을 만든다(저장은 사용자가 한다).", {
-        "type": "object",
-        "properties": {"date": {"type": "string", "description": "YYYY-MM-DD, 생략 시 오늘"}},
+    ToolSpec("get_trail_brief", "앞길 브리핑: 일몰 대비 도착 예상(늦어도 출발해야 할 시각 포함), 앞쪽 화장실·식당·쉼터, 앞 6시간 날씨를 "
+             "한 번에 조회한다. '지금 걸어도 되나', '해 지기 전에 도착하나', '앞에 쉴 곳 있나' 같은 질문에 쓴다.", {
+        "type": "object", "properties": {},
     }),
 ]
 
@@ -220,16 +218,8 @@ class ToolContext:
         return {"proposal_id": p.id, "status": "pending_user_approval",
                 "message": "일정 변경 제안을 만들었습니다. 사용자가 앱에서 승인해야 반영됩니다."}
 
-    def create_journal_draft(self, date=None):
-        if not self.trip:
-            return {"status": "unavailable", "message": "여행이 없습니다."}
-        d = _date.fromisoformat(date) if date else now_kst().date()
-        try:
-            e = journal_service.draft_daily(self.db, self.trip, d, self.prefs)
-        except journal_service.NotEnoughRecords as exc:
-            return {"status": "not_enough_records", "message": str(exc)}
-        return {"entry_id": e.id, "draft": e.ai_draft, "status": "draft",
-                "message": "일기 초안을 만들었습니다. 일기 화면에서 수정 후 저장해 주세요."}
+    def get_trail_brief(self):
+        return brief_service.build_brief(self.db, self.user, self.trip, self.session)
 
     def execute(self, name: str, args: dict):
         allowed = {t.name for t in TOOLS}

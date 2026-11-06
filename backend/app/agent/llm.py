@@ -145,6 +145,7 @@ class MockLLM:
     INTENTS = [
         (("날씨", "비", "바람", "예보"), "get_weather", {}),
         (("공지", "우회", "통제", "폐쇄"), "get_route_notices", {}),
+        (("브리핑", "앞길", "걸어도", "해 지기", "해지기", "일몰"), "get_trail_brief", {}),
         (("도착", "남은", "언제", "몇 시"), "estimate_arrival", {}),
         (("다음 경유지", "다음 포인트", "경유지까지"), "get_next_waypoint", {}),
         (("경유지",), "get_waypoints", {}),
@@ -154,7 +155,6 @@ class MockLLM:
         (("화장실",), "find_places_near", {"category": "toilet"}),
         (("숙소", "숙박", "게스트하우스"), "find_places_near", {"category": "lodging"}),
         (("와이파이", "wifi"), "find_places_near", {"category": "wifi"}),
-        (("일기",), "create_journal_draft", {}),
         (("일정", "계획"), "get_trip_plan", {}),
         (("코스",), "list_routes", {}),
     ]
@@ -172,7 +172,7 @@ class MockLLM:
             except Exception as exc:
                 return AgentRun(text=f"정보를 가져오지 못했습니다: {exc}", tool_calls=[ToolCall(tool, args, False, str(exc))], provider=self.name)
         return AgentRun(
-            text="(오프라인 모드) 코스·일정·날씨·공지·도착 예상·주변 장소·일기 초안에 대해 물어보실 수 있어요. "
+            text="(오프라인 모드) 코스·일정·날씨·공지·도착 예상·주변 장소·앞길 브리핑에 대해 물어보실 수 있어요. "
                  "자유 대화는 AI 키를 설정하면 사용할 수 있습니다.",
             provider=self.name,
         )
@@ -184,6 +184,18 @@ def _summarize(tool: str, out: Any) -> str:
             return out.get("message") or "정보를 확인할 수 없습니다."
         if tool == "estimate_arrival" and "eta_hhmm" in out:
             return f"남은 거리 약 {out['remaining_km']}km, 예상 도착 {out['eta_hhmm']} (일몰 {out['sunset_hhmm']}). {out['assumptions']}"
+        if tool == "get_trail_brief":
+            lines = [out["daylight"].get("message") or "일몰 비교 정보를 확인할 수 없습니다."]
+            sup = out["supplies"]
+            if sup.get("status") == "ok":
+                first = next(((g["label"], g["places"][0]) for g in sup["groups"] if g["places"]), None)
+                if first:
+                    p = first[1]
+                    where = f"앞 {p['ahead_m']}m" if p.get("ahead_m") is not None else f"{p['distance_m']}m"
+                    lines.append(f"가까운 {first[0]}: {p['name']} ({where}, 영업 여부는 확인 필요)")
+            w = out["weather"]
+            lines.append(w.get("headline") or w.get("message") or "날씨를 확인하지 못했습니다.")
+            return "\n".join(lines)
         if tool == "get_route_notices":
             notices = out.get("notices", [])
             head = f"{out.get('route')} 활성 공지 {len(notices)}건." + "".join(f"\n- {n['title']}" for n in notices)

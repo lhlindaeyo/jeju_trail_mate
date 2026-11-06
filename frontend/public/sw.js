@@ -1,9 +1,9 @@
 // Minimal offline support: cache the app shell; API GETs fall back to the last cached copy.
-const SHELL = "jtm-shell-v2";
+const SHELL = "jtm-shell-v3";
 const API = "jtm-api-v1";
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/index.html", "/manifest.webmanifest", "/icon.svg", "/splash.webp"])));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/splash.webp"])));
   self.skipWaiting();
 });
 
@@ -17,7 +17,6 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // map tiles etc. go straight to network
-  if (url.pathname.startsWith("/v1/files")) return; // signed media links are never cached
   if (url.pathname.startsWith("/v1/")) {
     e.respondWith(
       fetch(req)

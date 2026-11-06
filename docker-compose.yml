@@ -50,7 +50,6 @@ services:
     environment:
       APP_ENV: production
       DATABASE_URL: sqlite:////data/jeju_trail_mate.db
-      STORAGE_DIR: /data/storage
       LLM_CHAIN: ollama,mock
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}

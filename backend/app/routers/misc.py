@@ -1,8 +1,7 @@
-"""Notifications, AI companion, account data rights, signed file access, admin data management."""
+"""Notifications, AI companion, account data rights, admin data management."""
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,9 +11,7 @@ from ..auth import current_user, require_admin
 from ..db import get_db
 from ..models import AuditEvent, Notification, RouteNotice, TrackingSession, Trip, User
 from ..rules.engine import notification_to_dict
-from ..services import storage as storage_mod
 from ..services.route_service import find_route, route_to_dict
-from ..services.storage import storage
 from .common import audit, not_found, owned_session, owned_trip
 
 router = APIRouter(prefix="/v1")
@@ -71,32 +68,13 @@ def chat(body: ChatIn, user: User = Depends(current_user), db: Session = Depends
     return orchestrator.chat(db, user, body.message, trip, session, body.history)
 
 
-# --- files (signed URLs) -----------------------------------------------------------
-
-
-@router.get("/files", tags=["files"])
-def get_file(key: str, exp: int, sig: str):
-    if not storage_mod.verify(key, exp, sig):
-        raise HTTPException(403, "link expired or invalid")
-    try:
-        data = storage.read(key)
-    except (OSError, ValueError):
-        raise not_found()
-    ext = "." + key.rsplit(".", 1)[-1]
-    ctype = next((ct for ct, (_k, e) in storage_mod.ALLOWED_TYPES.items() if e == ext), "application/octet-stream")
-    if ctype == "text/html":
-        ctype = "text/html; charset=utf-8"
-    return Response(data, media_type=ctype, headers={"Cache-Control": "private, max-age=60", "X-Content-Type-Options": "nosniff"})
-
-
 # --- data rights (single local user) -------------------------------------------------------------
 
 
 @router.get("/account/export", tags=["account"])
 def export_data(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Machine-readable export of the user's own data (media referenced by short-lived links)."""
+    """Machine-readable export of the user's own data."""
     from .me import prefs_to_dict
-    from ..services.journal_service import entry_to_dict
     from ..services.schedule_service import plan_view
 
     trips = db.scalars(select(Trip).where(Trip.user_id == user.id))
@@ -105,7 +83,6 @@ def export_data(user: User = Depends(current_user), db: Session = Depends(get_db
         out.append({
             "trip": {"id": t.id, "title": t.title, "start_date": t.start_date.isoformat(), "end_date": t.end_date.isoformat()},
             "plan": plan_view(db, t),
-            "journal": [entry_to_dict(e, {m.id: storage_mod.signed_url(m.storage_key) for m in e.media}) for e in t.journal_entries],
             "sessions": [{"id": s.id, "route": s.route.name if s.route else None, "started_at": s.started_at.isoformat(),
                           "ended_at": s.ended_at.isoformat() if s.ended_at else None, "distance_m": s.distance_m,
                           "points": [{"t": p.timestamp.isoformat(), "lat": p.lat, "lon": p.lon, "acc": p.accuracy_m} for p in s.points]}
@@ -118,14 +95,12 @@ def export_data(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @router.delete("/account/data", tags=["account"])
 def delete_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Erases the local user's rows (cascade), media and generated books. The next request starts a fresh profile."""
-    files = storage.delete_prefix(user.id)
+    """Erases the local user's rows (cascade). The next request starts a fresh profile."""
     uid = user.id
     db.delete(user)
     db.add(AuditEvent(user_id=uid, event_type="account_deleted", resource_type="user", resource_id=uid))
     db.commit()
-    return {"deleted": True, "files_removed": files,
-            "note": "이 기기에 저장된 여행·일기·사진·책을 모두 삭제했어요."}
+    return {"deleted": True, "note": "이 기기에 저장된 여행·이동 기록을 모두 삭제했어요."}
 
 
 # --- admin: verified course data & notices (spec §02 데이터 갱신 전략) ---------------

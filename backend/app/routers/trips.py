@@ -73,15 +73,7 @@ def update_trip(trip_id: str, body: TripPatch, user: User = Depends(current_user
 
 @router.delete("/{trip_id}", status_code=204)
 def delete_trip(trip_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    from ..services.storage import storage
-
     t = owned_trip(db, user, trip_id)
-    for e in t.journal_entries:
-        for m in e.media:
-            storage.delete(m.storage_key)
-    for b in t.books:
-        if b.storage_key:
-            storage.delete(b.storage_key)
     audit(db, user.id, "trip_deleted", "trip", t.id)
     db.delete(t)
     db.commit()

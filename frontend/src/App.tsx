@@ -5,11 +5,11 @@ import Onboarding from "./screens/Onboarding";
 import Home from "./screens/Home";
 import Explore from "./screens/Explore";
 import Companion from "./screens/Companion";
-import Diary from "./screens/Diary";
+import Brief from "./screens/Brief";
 import { MenuSheet, Sheet, type SheetName } from "./screens/Sheets";
 
-export type Page = "home" | "explore" | "ai" | "diary";
-const PAGES: Page[] = ["home", "explore", "ai", "diary"];
+export type Page = "home" | "explore" | "ai" | "brief";
+const PAGES: Page[] = ["home", "explore", "ai", "brief"];
 const COURSE_KEY = "jtm.courseId";
 const TRIP_KEY = "jtm.tripId";
 const JEJU_BOUNDS = { minLat: 33.0, maxLat: 33.7, minLon: 126.0, maxLon: 127.0 };
@@ -50,9 +50,9 @@ const NAV_ICONS: Record<Page, ReactNode> = {
   home: <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5V20H4z" /><path d="M10 20v-5h4v5" /></svg>,
   explore: <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></svg>,
   ai: <svg viewBox="0 0 24 24"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" /><path d="M12 8.2v4.6M9.7 10.5h4.6" /></svg>,
-  diary: <svg viewBox="0 0 24 24"><path d="M5 20h4l10-10-4-4L5 16z" /><path d="M13.5 7.5l4 4" /></svg>,
+  brief: <svg viewBox="0 0 24 24"><path d="M4 17h16" /><path d="M7 17a5 5 0 0 1 10 0" /><path d="M12 6v2.5M5.6 9.6l1.7 1.7M18.4 9.6l-1.7 1.7" /><path d="M8 20.5h8" /></svg>,
 };
-const NAV_LABEL: Record<Page, string> = { home: "홈", explore: "코스탐색", ai: "AI동행자", diary: "일기작성" };
+const NAV_LABEL: Record<Page, string> = { home: "홈", explore: "코스탐색", ai: "AI동행자", brief: "앞길브리핑" };
 
 export default function App() {
   const [me, setMe] = useState<Json | null>(null);
@@ -196,10 +196,7 @@ export default function App() {
     try { await api(`/v1/notifications/${n.id}/action`, { body: { action: id } }); } catch { /* ignore */ }
     if (id === "open_map") go("home");
     if (id === "replan") setSheet("plan");
-    if (id === "open_journal") {
-      if (typeof action !== "string" && action.waypoint_id) store("jtm.diaryWaypoint", action.waypoint_id);
-      go("diary");
-    }
+    if (id === "open_brief") go("brief");
     if (id === "open_notice" && n.source?.url) window.open(n.source.url, "_blank", "noopener");
   };
 
@@ -207,7 +204,7 @@ export default function App() {
     me, refreshMe, trips, trip, setTripId, refreshTrips, session, setSession, course, setCourseId, refreshCourse,
     go, openSheet: setSheet, toast, pushNotifications, notifications, locOn, setLocOn, pos, locMsg, flushGps,
   };
-  const Screen = { home: Home, explore: Explore, ai: Companion, diary: Diary }[page];
+  const Screen = { home: Home, explore: Explore, ai: Companion, brief: Brief }[page];
 
   const app = ctx && (
     <AppCtx.Provider value={ctx}>

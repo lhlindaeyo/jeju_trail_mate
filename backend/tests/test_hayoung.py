@@ -1,4 +1,4 @@
-"""v1.2: two trail types, data pipeline, route-geometry progress, waypoint check-in, diary."""
+"""v1.2: two trail types, data pipeline, route-geometry progress, waypoint check-in."""
 import math
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -16,7 +16,6 @@ from app.db import SessionLocal
 from app.services.geo import haversine_m, path_length_m, project_on_path
 
 from .conftest import make_trip, route_id
-from .test_journal_book import PNG
 
 ORIGIN = (33.2530, 126.5600)  # synthetic test square near Seogwipo — not real course data
 SIDE_DEG_LAT, SIDE_DEG_LON = 0.0045, 0.0054  # ≈ 500 m each
@@ -278,18 +277,6 @@ def test_olle_plan_chains_end_to_start(client, auth):
     assert [r["course_no"] for r in routes] == ["4", "5", "6"]  # 표선→남원→쇠소깍→서귀포
     for a, b in zip(routes, routes[1:]):
         assert b["start_point"] == a["end_point"]
-
-
-def test_diary_photo_and_three_lines(client, auth, hayoung_imported):
-    trip = make_trip(client, auth)
-    wp = client.get(f"/v1/routes/{hayoung_imported}").json()["waypoints"][5]
-    form = {"trip_id": trip, "text": "새연교 바람\n노을이 예뻤다", "waypoint_id": wp["id"]}
-    r = client.post("/v1/diary", headers=auth, data=form, files={"photo": ("a.png", PNG, "image/png")})
-    assert r.status_code == 201, r.text
-    assert r.json()["waypoint"]["name"] == wp["name"] and r.json()["media"][0]["url"]
-    bad = client.post("/v1/diary", headers=auth, data={**form, "text": "1\n2\n3\n4"}, files={"photo": ("a.png", PNG, "image/png")})
-    assert bad.status_code == 422 and "3줄" in bad.text
-    assert client.post("/v1/diary", headers=auth, data=form).status_code == 422  # photo is required
 
 
 def test_poi_import_and_search(client, auth):

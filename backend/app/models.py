@@ -41,11 +41,9 @@ class UserPreferences(Base):
     rest_every_minutes: Mapped[int] = mapped_column(Integer, default=90)
     interests: Mapped[list] = mapped_column(JSON, default=list)  # e.g. ["바다", "카페", "문화"]
     notification_settings: Mapped[dict] = mapped_column(JSON, default=dict)
-    journal_style: Mapped[str | None] = mapped_column(String(200))
     # Separate, revocable consents (spec §13)
     consent_location: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_microphone: Mapped[bool] = mapped_column(Boolean, default=False)
-    consent_photos: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_ai_processing: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_memory: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -194,8 +192,6 @@ class Trip(Base):
     user: Mapped[User] = relationship(back_populates="trips")
     schedules: Mapped[list[DailySchedule]] = relationship(back_populates="trip", cascade="all, delete-orphan")
     sessions: Mapped[list[TrackingSession]] = relationship(back_populates="trip", cascade="all, delete-orphan")
-    journal_entries: Mapped[list[JournalEntry]] = relationship(back_populates="trip", cascade="all, delete-orphan")
-    books: Mapped[list[JourneyBook]] = relationship(back_populates="trip", cascade="all, delete-orphan")
     proposals: Mapped[list[AgentProposal]] = relationship(back_populates="trip", cascade="all, delete-orphan")
 
 
@@ -279,45 +275,6 @@ class GpsPoint(Base):
     session: Mapped[TrackingSession] = relationship(back_populates="points")
 
 
-class JournalEntry(Base):
-    __tablename__ = "journal_entries"
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
-    date: Mapped[date] = mapped_column(Date)
-    kind: Mapped[str] = mapped_column(String(10), default="memo")  # memo | daily
-    text: Mapped[str | None] = mapped_column(Text)  # user's raw text / voice transcript
-    ai_draft: Mapped[str | None] = mapped_column(Text)
-    user_edited_text: Mapped[str | None] = mapped_column(Text)  # final, user-approved
-    mood_tags: Mapped[list] = mapped_column(JSON, default=list)
-    is_highlight: Mapped[bool] = mapped_column(Boolean, default=False)
-    waypoint_id: Mapped[str | None] = mapped_column(ForeignKey("route_waypoints.id", ondelete="SET NULL"))
-    lat: Mapped[float | None] = mapped_column(Float)
-    lon: Mapped[float | None] = mapped_column(Float)
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    visibility: Mapped[str] = mapped_column(String(10), default="private")
-    status: Mapped[str] = mapped_column(String(10), default="draft")  # draft | saved
-
-    trip: Mapped[Trip] = relationship(back_populates="journal_entries")
-    media: Mapped[list[MediaAsset]] = relationship(back_populates="entry", cascade="all, delete-orphan")
-    waypoint: Mapped[RouteWaypoint | None] = relationship()
-
-
-class MediaAsset(Base):
-    __tablename__ = "media_assets"
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    entry_id: Mapped[str] = mapped_column(ForeignKey("journal_entries.id", ondelete="CASCADE"), index=True)
-    storage_key: Mapped[str] = mapped_column(String(500))
-    media_type: Mapped[str] = mapped_column(String(10))  # photo | audio
-    content_type: Mapped[str] = mapped_column(String(100))
-    caption: Mapped[str | None] = mapped_column(Text)  # user-written description
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    lat: Mapped[float | None] = mapped_column(Float)
-    lon: Mapped[float | None] = mapped_column(Float)
-    consent_state: Mapped[str] = mapped_column(String(20), default="granted")
-
-    entry: Mapped[JournalEntry] = relationship(back_populates="media")
-
-
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
@@ -349,27 +306,6 @@ class AgentProposal(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     trip: Mapped[Trip] = relationship(back_populates="proposals")
-
-
-class JourneyBook(Base):
-    __tablename__ = "journey_books"
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
-    title: Mapped[str] = mapped_column(String(200))
-    theme: Mapped[str] = mapped_column(String(30), default="olle_green")
-    cover_media_id: Mapped[str | None] = mapped_column(String(32))
-    prologue: Mapped[str | None] = mapped_column(Text)
-    epilogue: Mapped[str | None] = mapped_column(Text)
-    excluded_entry_ids: Mapped[list] = mapped_column(JSON, default=list)
-    status: Mapped[str] = mapped_column(String(20), default="draft")
-    # draft → generating → preview_ready → user_approved → exported (or failed)
-    error: Mapped[str | None] = mapped_column(Text)
-    storage_key: Mapped[str | None] = mapped_column(String(500))
-    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    share_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    trip: Mapped[Trip] = relationship(back_populates="books")
 
 
 class AuditEvent(Base):
