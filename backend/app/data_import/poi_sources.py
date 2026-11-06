@@ -12,7 +12,8 @@
     → <Response><total/><page/><pageSize/><items><item> shop_code (001 음식점, 002 이미용, 003 세탁업,
        004 숙박업, 005 목욕업), shop_title, shop_tel, shop_local, shop_address, shop_goods,
        shop_holiday, shop_thumb </item></items></Response>
-    No coordinates: addresses are geocoded with the local 위치정보 요약DB (data/raw/juso_entrc) when present.
+    No coordinates: shops are matched by address (+ name) against the local 위치정보 요약DB (data/raw/juso_entrc)
+    and coordinate-bearing store lists (data/raw/stores: 소상공인 상가정보, 인허가 CSV) when present.
 
 Many APs share one place (several APs at 천지연폭포), so rows are merged per place name + address."""
 from __future__ import annotations
@@ -49,12 +50,15 @@ def _replace(db: Session, source_id: str, places: list[PoiPlace]) -> None:
 
 
 def geocoder():
-    """address -> (lat, lon) using the configured GEOCODER_CHAIN, restricted to providers whose results
-    may be stored (local 위치정보 요약DB; Kakao only with KAKAO_STORABLE=true). None when none is available."""
+    """(address, name=None) -> (lat, lon) using the configured GEOCODER_CHAIN, restricted to providers whose
+    results may be stored (local 위치정보 요약DB, store lists; Kakao only with KAKAO_STORABLE=true).
+    None when no such provider is available."""
     from ..geocode import get_geocoder
 
     chain = get_geocoder()
-    return chain.address_to_xy if any(p.storable for p in chain.providers) else None
+    if not any(p.storable for p in chain.providers):
+        return None
+    return lambda address, name=None: chain.business_to_xy(name, address)
 
 
 # --- 공공와이파이 CSV ----------------------------------------------------------------------
@@ -188,7 +192,7 @@ def goodprice_api(db: Session, *, license: str | None = None, client: httpx.Clie
         addr = it.get("shop_address") or None
         lat = lon = None
         if geocode and addr:
-            hit = geocode(addr)
+            hit = geocode(addr, it.get("shop_title"))
             if hit:
                 lat, lon = hit
                 located += 1
@@ -201,7 +205,7 @@ def goodprice_api(db: Session, *, license: str | None = None, client: httpx.Clie
     if not dry_run:
         _replace(db, GOODPRICE_SOURCE, places)
         src = register_api(db, GOODPRICE_SOURCE, license=license, ref_date=now.date().isoformat())
-        src.note = "서귀포시 OpenAPI 실시간 조회값을 적재" + ("(주소 지오코딩 포함)" if located else " — 좌표 없음: 위치정보 요약DB(data/raw/juso_entrc)를 넣고 다시 적재하면 거리순 추천에 쓰입니다.")
+        src.note = "서귀포시 OpenAPI 실시간 조회값을 적재" + ("(주소 지오코딩 포함)" if located else " — 좌표 없음: 상가정보(`sbiz-fetch`)나 위치정보 요약DB(data/raw/juso_entrc)를 넣고 다시 적재하면 거리순 추천에 쓰입니다.")
         db.commit()
     by_cat: dict[str, int] = {}
     for p in places:

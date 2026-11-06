@@ -46,6 +46,17 @@ def test_parse_address_variants():
     assert parse_address("") is None and parse_address("주소 없음") is None
 
 
+def test_parse_address_with_eup_myeon_prefix_and_odd_names():
+    # real addresses carry 읍/면 and numeric road names; the prefix must not become part of the road name
+    assert parse_address("서귀포시 성산읍 신양로122번길 30-8")["road"] == ("신양로122번길", 30, 8)
+    assert parse_address("서귀포시 안덕면 화순중앙로 76")["road"] == ("화순중앙로", 76, 0)
+    assert parse_address("서귀포시 안덕면 화순중앙로76")["road"] == ("화순중앙로", 76, 0)
+    assert parse_address("서귀포시 516로 462")["road"] == ("516로", 462, 0)
+    assert parse_address("서귀포시 신서로48번길 49, 101호 (서홍동, 신서한빛)")["road"] == ("신서로48번길", 49, 0)
+    assert parse_address("서귀포시 성산읍 한도로 242번길 10-19")["road"] == ("한도로242번길", 10, 19)
+    assert parse_address("서귀포시 안덕면 화순리 123-4")["parcel"] == ("화순리", False, 123, 4)
+
+
 def test_local_road_and_parcel_lookup(local):
     h = local.geocode_address("제주특별자치도 서귀포시 중앙로 62번길 5")
     assert h and h.storable and h.provider == "local" and abs(h.lat - 33.2480) < 1e-4 and abs(h.lon - 126.5650) < 1e-4

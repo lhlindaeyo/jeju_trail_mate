@@ -9,6 +9,8 @@
     python -m app.data_import locate-waypoints                       # place Hayoung waypoints on the route
     python -m app.data_import juso-inspect [folder]                  # check the downloaded 위치정보 요약DB (default data/raw/juso_entrc)
     python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"   # try every provider in GEOCODER_CHAIN
+    python -m app.data_import sbiz-fetch [--sigungu 50130 --classes I1,I2,S2]   # 상가정보 API → data/raw/stores/*.json
+    (그 뒤 `goodprice`를 다시 실행하면 상호·주소가 맞는 업소에 좌표가 채워집니다)
 
 Keys are read from the environment or backend/.env (JEJU_DATAHUB_APPKEY, VWORLD_API_KEY, KAKAO_REST_API_KEY).
 """
@@ -52,6 +54,12 @@ def _geocode_tools(a) -> dict:
 
     if a.kind == "juso-inspect":
         return juso_inspect(a.folder or get_settings().juso_entrc_dir)
+    if a.kind == "sbiz-fetch":
+        from . import sbiz_fetch
+
+        s = get_settings()
+        return sbiz_fetch.fetch(s.sbiz_service_key or s.kma_service_key, Path(a.folder or s.stores_dir),
+                                sigungu=a.sigungu, classes=tuple(c.strip() for c in a.classes.split(",") if c.strip()))
     if not a.address:
         return {"error": "--address 가 필요합니다"}
     chain = get_geocoder()
@@ -75,9 +83,11 @@ def _geocode_tools(a) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.data_import")
     ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "wifi-api", "locate-waypoints", "all",
-                                     "juso-inspect", "geocode"])
+                                     "juso-inspect", "geocode", "sbiz-fetch"])
     ap.add_argument("folder", type=Path, nargs="?")
     ap.add_argument("--address", help="geocode: 주소 또는 장소명")
+    ap.add_argument("--sigungu", default="50130", help="sbiz-fetch: 시군구코드 (서귀포시 50130, 제주시 50110)")
+    ap.add_argument("--classes", default="I1,I2,S2", help="sbiz-fetch: 업종 대분류 (I1 숙박, I2 음식, S2 개인서비스)")
     ap.add_argument("--inspect", action="store_true", help="print the SHP schema without loading")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--license", help="이용 조건 (예: 공공누리 제1유형)")
@@ -86,10 +96,14 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     _export_keys()
 
-    if a.kind in ("juso-inspect", "geocode"):
+    if a.kind in ("juso-inspect", "geocode", "sbiz-fetch"):
         sys.stdout.reconfigure(encoding="utf-8")
-        print(json.dumps(_geocode_tools(a), ensure_ascii=False, indent=1, default=str))
-        return 0
+        try:
+            result = _geocode_tools(a)
+        except ImportError_ as e:
+            result = {"error": str(e)}
+        print(json.dumps(result, ensure_ascii=False, indent=1, default=str))
+        return 1 if "error" in result else 0
 
     Base.metadata.create_all(engine)
     with SessionLocal() as db:

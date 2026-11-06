@@ -58,9 +58,10 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 
 def pick(columns: list[str], *needles: str) -> str | None:
-    """First column whose name contains any needle (in priority order)."""
+    """First column whose name contains any needle (in priority order), ignoring spaces and case
+    (real files say 좌표정보(X) while the needles were written 좌표정보(x))."""
     for n in needles:
         for c in columns:
-            if n in c.replace(" ", ""):
+            if n.lower() in c.replace(" ", "").lower():
                 return c
     return None

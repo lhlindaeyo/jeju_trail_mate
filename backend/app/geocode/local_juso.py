@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 
 from ..services.geo import haversine_m
+from .address import parse_address  # noqa: F401  (re-exported)
 from .base import GeocoderError, GeoHit, in_jeju, norm_name
 
 log = logging.getLogger(__name__)
@@ -26,10 +27,7 @@ SIDO, SIGUNGU, EMD, RI, SAN, BUNJI, HO = 3, 4, 5, 6, 7, 8, 9
 ROAD, BMAIN, BSUB, BNAME, BNAME2 = 11, 13, 14, 20, 21
 MIN_COLUMNS = 24
 SOURCE_CRS = "EPSG:5179"
-SIGUNGU_NAMES = ("제주시", "서귀포시")
 
-_ROAD_RE = re.compile(r"([가-힣]+(?:로|길)(?:\d+번길)?)(\d+)(?:-(\d+))?")
-_PARCEL_RE = re.compile(r"([가-힣]+(?:\d가)?(?:동|읍|면|리))(산)?(\d+)(?:-(\d+))?")
 _ROADNAME_OK = re.compile(r"^[가-힣0-9]+(?:로|길)$")
 
 
@@ -67,20 +65,6 @@ def _layout_ok(row: list[str]) -> bool:
         return False
     return (row[SIDO].endswith(("도", "시")) and bool(_ROADNAME_OK.match(row[ROAD]))
             and row[BMAIN].isdigit() and row[BSUB].isdigit())
-
-
-def parse_address(address: str) -> dict | None:
-    """-> {"sigungu", "road": (name, main, sub)} or {"sigungu", "parcel": (emd/ri, san, bunji, ho)}."""
-    a = re.sub(r"\([^)]*\)", "", address or "")
-    sigungu = next((s for s in SIGUNGU_NAMES if re.search(rf"(?:^|\s){s}(?:\s|$)", a)), None)
-    a = re.sub(r"(제주특별자치도|제주시|서귀포시)(?=\s|$)", "", a).replace(" ", "")
-    m = _ROAD_RE.search(a)
-    if m:
-        return {"sigungu": sigungu, "road": (m.group(1), int(m.group(2)), int(m.group(3) or 0))}
-    m = _PARCEL_RE.search(a)
-    if m:
-        return {"sigungu": sigungu, "parcel": (m.group(1), bool(m.group(2)), int(m.group(3)), int(m.group(4) or 0))}
-    return None
 
 
 class LocalJusoGeocoder:

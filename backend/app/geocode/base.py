@@ -83,6 +83,21 @@ class GeocoderChain:
                 return hits
         return []
 
+    def business_to_xy(self, name: str | None, address: str) -> tuple[float, float] | None:
+        """Like address_to_xy, but providers that can match a shop by name (store lists) use it too."""
+        for p in self.providers:
+            if not p.storable:
+                continue
+            try:
+                fn = getattr(p, "geocode_business", None)
+                hit = fn(name, address) if fn and name else p.geocode_address(address)
+            except Exception as exc:
+                log.warning("geocoder %s failed for %r: %s", p.name, address, exc)
+                continue
+            if hit:
+                return hit.lat, hit.lon
+        return None
+
     def address_to_xy(self, address: str) -> tuple[float, float] | None:
         """(lat, lon) from a provider whose results may be stored, else None. What importers persist."""
         hit = self.geocode_address(address, storable_only=True)

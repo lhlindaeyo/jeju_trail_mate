@@ -24,6 +24,14 @@ def get_geocoder(chain: str | None = None) -> GeocoderChain:
                 providers.append(g)
             else:
                 log.info("local juso DB not found in %s — skipped", s.juso_entrc_dir)
+        elif name == "stores":
+            from .store_match import StoreMatchGeocoder
+
+            st = StoreMatchGeocoder(s.stores_dir)
+            if st.available():
+                providers.append(st)
+            else:
+                log.info("no store lists in %s — skipped", s.stores_dir)
         elif name == "vworld" and s.vworld_api_key:
             from .vworld import VWorldGeocoder
 

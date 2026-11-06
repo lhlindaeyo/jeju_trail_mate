@@ -37,7 +37,8 @@ def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_
 
         to_xy = geocoder()
         if to_xy is None:
-            raise ImportError_("--geocode 에는 저장 가능한 지오코더가 필요합니다: 위치정보 요약DB를 data/raw/juso_entrc에 넣어 주세요")
+            raise ImportError_("--geocode 에는 저장 가능한 지오코더가 필요합니다: 위치정보 요약DB(data/raw/juso_entrc) 또는 "
+                               "상가정보·인허가 파일(data/raw/stores)을 넣어 주세요")
     transformer = None
     places: list[PoiPlace] = []
     now = datetime.now(timezone.utc)
@@ -73,7 +74,7 @@ def run(db: Session, folder: Path, *, source_id: str = "seogwipo_food", default_
                 report["problems"].append(f"{f.name}:{i + 2} 좌표 형식 오류")
             addr = r.get(c_addr) if c_addr else None
             if lat is None and to_xy and addr:
-                hit = to_xy(addr)
+                hit = to_xy(addr, r[c_name])
                 if hit:
                     lat, lon, precision = hit[0], hit[1], "geocoded"
                     report["geocoded"] += 1

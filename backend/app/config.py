@@ -52,8 +52,10 @@ class Settings(BaseSettings):
 
     # Geocoding (import time). GEOCODER_CHAIN is tried in order; results of providers whose terms
     # forbid storing them (VWorld, Kakao by default) are shown as suggestions, never written to the DB.
-    geocoder_chain: str = "local,vworld,kakao"
+    geocoder_chain: str = "local,stores,vworld,kakao"
     juso_entrc_dir: str = str(BACKEND_DIR.parent / "data" / "raw" / "juso_entrc")  # 위치정보 요약DB
+    stores_dir: str = str(BACKEND_DIR.parent / "data" / "raw" / "stores")  # 상가정보·인허가 CSV/JSON (좌표 포함 업소 목록)
+    sbiz_service_key: str | None = None  # 공공데이터포털 키 (소상공인 상가정보 API); 없으면 kma_service_key 사용
     vworld_api_key: str | None = None  # 브이월드 Geocoder/Search 2.0 인증키
     vworld_domain: str | None = None  # 키 발급 때 등록한 도메인
     kakao_rest_api_key: str | None = None  # 선택: 주소/장소명 → 좌표

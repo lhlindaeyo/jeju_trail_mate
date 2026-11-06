@@ -9,6 +9,10 @@
 | `poi/` | 공공와이파이 관광지 AP CSV, OpenAPI 활용가이드(HWP) 2종 | 있음 — 좌표는 OpenAPI로 받음 |
 | `juso_entrc/` | **도로명주소 위치정보 요약DB** 제주특별자치도 파일(.txt 또는 .zip) — 주소 → 좌표 변환용(공공누리 1유형, 출처표시) | 승인 대기. 받은 뒤 `python -m app.data_import juso-inspect`로 형식 확인 |
 
+| `stores/` | 좌표가 들어 있는 업소 목록 — **소상공인 상가(상권)정보**(`python -m app.data_import sbiz-fetch`로 받은 JSON 또는 data.go.kr CSV)와 **인허가 음식점·숙박 CSV**(좌표정보 X/Y). 착한가격업소 등 주소만 있는 장소에 상호·주소로 좌표를 맞추는 용도 | 승인 없이 가능(상가정보 API 키는 자동승인) |
+
+좌표 채우는 순서: 위 파일을 넣고 → `python -m app.data_import goodprice`. 상호·주소가 맞는 업소만 채우고 애매하면 비워 둡니다.
+
 받는 곳: <http://www.juso.go.kr/externalLink/goUrl.do?menuId=DT03> (로그인·본인인증·이용목적 심사). 주소기반산업지원서비스 > 주소정보 다운로드에서는 **"제공하는 주소(도형, 좌표)"** 쪽입니다("공개하는 주소(속성)"의 주소DB·건물DB에는 좌표가 없습니다).
 
 ## 적재
