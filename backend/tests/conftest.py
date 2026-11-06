@@ -6,6 +6,7 @@ os.environ.update({
     "DATABASE_URL": f"sqlite:///{_tmp}/test.db",
     "STORAGE_DIR": f"{_tmp}/storage",
     "LLM_PROVIDER": "mock",
+    "LLM_CHAIN": "",  # a developer's .env may set a chain; tests always run offline on the mock
     "ADMIN_TOKEN": "test-admin",
     "KMA_SERVICE_KEY": "",
     

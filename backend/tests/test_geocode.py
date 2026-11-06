@@ -166,7 +166,7 @@ def test_chain_from_settings_skips_unconfigured_providers(monkeypatch, tmp_path)
     from app.config import Settings
 
     (tmp_path / "e.txt").write_bytes("\n".join(ROWS).encode("cp949"))
-    cfg = {"juso_entrc_dir": str(tmp_path), "vworld_api_key": "K"}
+    cfg = {"juso_entrc_dir": str(tmp_path), "vworld_api_key": "K", "stores_dir": str(tmp_path / "no-stores")}
     monkeypatch.setattr(g, "get_settings", lambda: Settings(_env_file=None, **cfg))
     assert [p.name for p in get_geocoder().providers] == ["local", "vworld"]  # kakao has no key
     assert [p.name for p in get_geocoder("vworld,local").providers] == ["vworld", "local"]

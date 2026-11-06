@@ -1,12 +1,13 @@
 """소상공인시장진흥공단 상가(상권)정보 OpenAPI → data/raw/stores/sbiz_<시군구>_<업종>.json
 
-    GET https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInUpjong
+    GET https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInDong      (행정동 단위 상가업소 조회)
         ?serviceKey=<일반 인증키(Decoding)>&type=json&pageNo=1&numOfRows=1000
         &divId=signguCd&key=50130&indsLclsCd=I2
 
 시군구코드: 서귀포시 50130, 제주시 50110. 업종 대분류: I1 숙박, I2 음식, S2 수리·개인서비스(이·미용·세탁·목욕).
-엔드포인트·파라미터·업종코드는 공식 문서를 직접 확인하지 못하고 작성했습니다 — 응답이 비거나 오류면 활용가이드와
-대조하세요(`--classes`, `--sigungu`로 바꿀 수 있음). 이 파일은 data/raw 아래라 git에 올라가지 않습니다.
+2026-11-07 실제 키로 확인: 서귀포 I1 2,546 · I2 5,976 · S2 1,280곳이 좌표와 함께 내려옴.
+(`storeListInUpjong`에 divId=signguCd를 쓰면 INVALID_REQUEST_PARAMETER_ERROR. 신분류 코드 Q·I 등은 NODATA.)
+이 파일은 data/raw 아래라 git에 올라가지 않습니다.
 인증키는 공공데이터포털 키(SBIZ_SERVICE_KEY, 없으면 KMA_SERVICE_KEY와 같은 계정 키를 사용)."""
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ import httpx
 
 from .common import ImportError_
 
-API = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInUpjong"
+API = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInDong"
 KEEP = ("bizesNm", "brchNm", "rdnmAdr", "lnoAdr", "lat", "lon", "indsLclsNm", "indsSclsNm")
 
 
