@@ -1,0 +1,8 @@
+{
+  "name": "jeju-trail-mate",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs"
+  }
+}

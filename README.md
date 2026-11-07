@@ -65,6 +65,12 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
+**한 번에 실행**: 위 설치(venv·`pip install`)를 한 번 해둔 뒤에는 저장소 루트에서 아래 한 줄이면 백엔드(8000)와 프런트(5173)가 같이 뜹니다. `frontend/node_modules`가 없으면 자동으로 `npm install`도 합니다. Ctrl+C로 둘 다 종료됩니다.
+
+```bash
+npm run dev
+```
+
 테스트: `cd backend && .venv/Scripts/python -m pytest -q`
 
 > DB 구조가 v1.2에서 바뀌었습니다. 예전 개발용 `jeju_trail_mate.db`가 있으면 지우고 다시 실행하세요(운영에서는 Alembic 마이그레이션 필요).
