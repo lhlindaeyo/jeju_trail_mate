@@ -6,6 +6,7 @@ import Home from "./screens/Home";
 import Explore from "./screens/Explore";
 import Companion from "./screens/Companion";
 import Brief from "./screens/Brief";
+import Guide, { type GuideStep } from "./screens/Guide";
 import { MenuSheet, Sheet, type SheetName } from "./screens/Sheets";
 
 export type Page = "home" | "explore" | "ai" | "brief";
@@ -53,6 +54,16 @@ const NAV_ICONS: Record<Page, ReactNode> = {
   brief: <svg viewBox="0 0 24 24"><path d="M4 17h16" /><path d="M7 17a5 5 0 0 1 10 0" /><path d="M12 6v2.5M5.6 9.6l1.7 1.7M18.4 9.6l-1.7 1.7" /><path d="M8 20.5h8" /></svg>,
 };
 const NAV_LABEL: Record<Page, string> = { home: "홈", explore: "코스탐색", ai: "AI동행자", brief: "앞길브리핑" };
+const GUIDE_KEY = "jtm.guideSeen";
+const tab = (p: Page) => `.nav button[data-tab="${p}"]`;
+// order: settings first, then the bottom tabs from left to right
+const GUIDE_STEPS: GuideStep[] = [
+  { target: 'button.menu[aria-label="메뉴"]', title: "설정 · 메뉴", desc: "일정, 설정, 데이터 출처를 여기서 열어요." },
+  { target: tab("home"), title: NAV_LABEL.home, desc: "지도에서 코스를 보고 걷기를 시작·기록해요." },
+  { target: tab("explore"), title: NAV_LABEL.explore, desc: "올레길 코스를 둘러보고 고를 수 있어요." },
+  { target: tab("ai"), title: NAV_LABEL.ai, desc: "궁금한 걸 묻고, 걷는 중 알림을 받아요." },
+  { target: tab("brief"), title: NAV_LABEL.brief, desc: "일몰 전 도착 여부, 앞쪽 편의시설, 날씨를 미리 알려줘요." },
+];
 
 export default function App() {
   const [me, setMe] = useState<Json | null>(null);
@@ -69,6 +80,8 @@ export default function App() {
   const [courseId, setCourseIdState] = useState<string | null>(store(COURSE_KEY));
   const [toasts, setToasts] = useState<Json[]>([]);
   const [notifications, setNotifications] = useState<Json[]>([]);
+  const [guideOpen, setGuideOpen] = useState(() => store(GUIDE_KEY) !== "1");
+  const closeGuide = useCallback(() => { setGuideOpen(false); store(GUIDE_KEY, "1"); }, []);
   const [pill, setPill] = useState("");
   const [locOn, setLocOn] = useState(false);
   const [pos, setPos] = useState<Position | null>(null);
@@ -227,7 +240,7 @@ export default function App() {
         <nav className="nav" aria-label="주요 메뉴" style={{ ["--i" as string]: PAGES.indexOf(page) }}>
           <span className="dot" aria-hidden="true" />
           {PAGES.map((p) => (
-            <button key={p} type="button" aria-label={NAV_LABEL[p]} title={NAV_LABEL[p]} aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>
+            <button key={p} type="button" data-tab={p} aria-label={NAV_LABEL[p]} title={NAV_LABEL[p]} aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>
               {NAV_ICONS[p]}
               {p === "home" && recording && <span className="live" aria-label="기록 중" />}
             </button>
@@ -236,6 +249,7 @@ export default function App() {
         <div className={`pilltoast ${pill ? "show" : ""}`} role="status">{pill}</div>
         {sheet === "menu" && <MenuSheet onClose={() => setSheet(null)} />}
         {sheet && sheet !== "menu" && <Sheet name={sheet} onClose={() => setSheet(null)} />}
+        {guideOpen && splash === "gone" && <Guide steps={GUIDE_STEPS} onClose={closeGuide} />}
       </div>
     </AppCtx.Provider>
   );

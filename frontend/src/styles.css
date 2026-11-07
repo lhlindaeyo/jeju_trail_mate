@@ -134,6 +134,12 @@ label.field { display: block; margin: 10px 0; font-size: 13px; color: var(--mute
 label.field > input, label.field > select, label.field > textarea { margin-top: 4px; color: var(--ink); }
 .toggle { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 14px; }
 .toggle:last-child { border-bottom: 0; }
+.toggle-row { border-bottom: 1px solid var(--line); }
+.toggle-row:last-of-type { border-bottom: 0; }
+.toggle-row .toggle { border-bottom: 0; flex: 1; }
+.toggle-row-main { display: flex; align-items: center; gap: 8px; }
+.help-btn { flex: 0 0 auto; width: 24px; height: 24px; min-height: 0; padding: 0; border-radius: 50%; border: 1.5px solid var(--teal); background: #fff; color: var(--teal); font-size: 13px; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.help-text { margin: 0 0 10px 32px; font-size: 13px; color: var(--muted, #667); }
 .toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--teal); flex: 0 0 auto; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border-radius: 999px; padding: 6px 12px; min-height: 34px; background: #fff; box-shadow: var(--shadow-soft); font-size: 13px; font-weight: 600; }
@@ -184,6 +190,18 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .pilltoast { position: absolute; left: 50%; bottom: 170px; transform: translate(-50%, 12px); background: var(--nav); color: #fff; border-radius: 999px;
   padding: 10px 16px; font-size: 13px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 1600; white-space: nowrap; }
 .pilltoast.show { opacity: 1; transform: translate(-50%, 0); }
+.guide-root { position: absolute; inset: 0; z-index: 1700; }
+.guide-spot { position: absolute; border-radius: 999px; box-shadow: 0 0 0 2px #fff, 0 0 0 2000px rgba(15, 17, 21, .5); pointer-events: none; transition: all .25s ease-out; }
+.guide-bubble { position: absolute; background: #fff; border-radius: 16px; padding: 12px 14px; box-shadow: 0 10px 28px rgba(0, 0, 0, .3); }
+.guide-arrow { position: absolute; width: 12px; height: 12px; background: #fff; transform: rotate(45deg); }
+.guide-bubble.above .guide-arrow { bottom: -6px; }
+.guide-bubble.below .guide-arrow { top: -6px; }
+.guide-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.guide-head b { font-size: 14px; }
+.guide-x { width: 28px; height: 28px; margin: -6px -8px -6px 0; border-radius: 50%; font-size: 18px; color: var(--muted); }
+.guide-bubble p { margin: 4px 0 10px; font-size: 13px; line-height: 1.45; }
+.guide-foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.guide-next { height: 30px; padding: 0 14px; border-radius: 999px; background: var(--teal); color: #fff; font-size: 12px; font-weight: 800; }
 .sheet-bg { position: absolute; inset: 0; background: rgba(15, 17, 21, .35); z-index: 1300; }
 .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 40px; background: var(--paper); border-radius: 24px 24px 0 0; z-index: 1301;
   display: flex; flex-direction: column; box-shadow: 0 -10px 30px rgba(0, 0, 0, .2); }

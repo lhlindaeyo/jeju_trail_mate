@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
-import { api, clearLocalData, type Json } from "../api";
+import { api, type Json } from "../api";
 import { useApp } from "../App";
 
 const INTERESTS = ["바다", "오름", "숲", "카페", "문화", "마을", "일출", "풍경"];
-const NOTIFY_TYPES: [string, string][] = [
-  ["route_notice", "공식 우회·통제 공지 (안전)"],
-  ["end_time_risk", "종료 시각·일몰 임박 (안전)"],
-  ["schedule_delay", "일정 지연"],
-  ["rest_reminder", "휴식 제안"],
-  ["weather", "비 예보"],
-  ["notice_unverified", "공지 최신 확인 필요"],
+const NOTIFY_TYPES: [string, string, string][] = [
+  ["route_notice", "공식 우회·통제 공지 (안전)", "공식 우회·통제 소식이 있을 때 알려줘요."],
+  ["end_time_risk", "종료 시각·일몰 임박 (안전)", "해 지기 전에 못 끝낼 것 같으면 알려줘요."],
+  ["schedule_delay", "일정 지연", "계획보다 늦어지면 알려줘요."],
+  ["rest_reminder", "휴식 제안", "쉬어갈 때가 되면 알려줘요."],
+  ["weather", "비 예보", "비가 올 것 같으면 알려줘요."],
+  ["notice_unverified", "공지 최신 확인 필요", "공지를 최신으로 확인하지 못했을 때 알려줘요."],
 ];
 
 export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () => void | Promise<void>; submitLabel?: string }) {
   const [p, setP] = useState<Json | null>(null);
   const [msg, setMsg] = useState("");
+  const [helpOpen, setHelpOpen] = useState<string | null>(null);
 
   useEffect(() => { api("/v1/me").then(setP).catch((e) => setMsg(e.message)); }, []);
   if (!p) return <p className="muted">{msg || "불러오는 중…"}</p>;
@@ -74,10 +75,14 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
 
       <div className="card">
         <h2>알림</h2>
-        <label className="toggle"><input type="checkbox" checked={ns.enabled !== false} onChange={(e) => set("notification_settings", { ...ns, enabled: e.target.checked })} />
-          <span><strong>알림 전체</strong></span></label>
-        {NOTIFY_TYPES.map(([k, label]) => (
-          <label key={k} className="toggle"><input type="checkbox" disabled={ns.enabled === false} checked={(ns.types ?? {})[k] !== false} onChange={(e) => setType(k, e.target.checked)} /><span>{label}</span></label>
+        {NOTIFY_TYPES.map(([k, label, help]) => (
+          <div key={k} className="toggle-row">
+            <div className="toggle-row-main">
+              <label className="toggle"><input type="checkbox" checked={(ns.types ?? {})[k] !== false} onChange={(e) => setType(k, e.target.checked)} /><span>{label}</span></label>
+              <button type="button" className="help-btn" aria-label={`${label} 설명`} aria-expanded={helpOpen === k} onClick={() => setHelpOpen(helpOpen === k ? null : k)}>?</button>
+            </div>
+            {helpOpen === k && <p className="help-text">{help}</p>}
+          </div>
         ))}
         <p className="muted small">안전 알림을 끄면 우회 공지·일몰 경고를 받지 못합니다.</p>
       </div>
@@ -89,39 +94,11 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
 
 export default function Settings() {
   const { refreshMe, me } = useApp();
-  const [msg, setMsg] = useState("");
-
-  const exportData = async () => {
-    const data = await api("/v1/account/export");
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "jeju-trail-mate-export.json"; a.click();
-    URL.revokeObjectURL(url);
-  };
-  const deleteAll = async () => {
-    if (!confirm("모든 여행·이동 기록과 설정을 삭제합니다. 되돌릴 수 없어요. 계속할까요?")) return;
-    const r = await api("/v1/account/data", { method: "DELETE" });
-    setMsg(r.note);
-    await clearLocalData();
-    location.reload();
-  };
-  const enableBrowserNotifications = async () => {
-    if (!("Notification" in window)) return setMsg("이 브라우저는 알림을 지원하지 않습니다.");
-    const p = await Notification.requestPermission();
-    setMsg(p === "granted" ? "브라우저 알림을 켰어요." : "알림 권한이 허용되지 않았어요.");
-  };
 
   return (
     <div>
       <p className="muted small">AI: {me.ai_provider === "mock" ? "오프라인 모드(도구 조회만)" : me.ai_provider}</p>
       <PrefsForm onSaved={refreshMe} />
-      <div className="card stack">
-        <h2>내 데이터</h2>
-        <button className="btn secondary" onClick={enableBrowserNotifications}>브라우저 알림 허용</button>
-        <button className="btn secondary" onClick={exportData}>데이터 내보내기 (JSON)</button>
-        <button className="btn danger" onClick={deleteAll}>모든 데이터 삭제</button>
-        {msg && <p className="muted">{msg}</p>}
-      </div>
     </div>
   );
 }
