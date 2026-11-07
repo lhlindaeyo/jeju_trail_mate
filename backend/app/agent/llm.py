@@ -143,6 +143,8 @@ class MockLLM:
     external = False
 
     INTENTS = [
+        (("이야기", "전설", "유래", "설화"), "get_tour_story", {}),
+        (("관광지", "명소", "가볼", "볼거리"), "find_tour_spots", {}),
         (("날씨", "비", "바람", "예보"), "get_weather", {}),
         (("공지", "우회", "통제", "폐쇄"), "get_route_notices", {}),
         (("브리핑", "앞길", "걸어도", "해 지기", "해지기", "일몰"), "get_trail_brief", {}),
@@ -216,6 +218,18 @@ def _summarize(tool: str, out: Any) -> str:
 
             head = f"{out['message']}\n" if out.get("message") else ""
             return head + "\n".join(line(p) for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"
+        if tool == "find_tour_spots" and out.get("places"):
+            head = f"{out['note']}\n" if out.get("note") else ""
+            lines = []
+            for p in out["places"]:
+                dist = f" ({p['distance_m']}m)" if p.get("distance_m") is not None else ""
+                lines.append(f"- {p['name']}{dist} · {p['summary']}")
+            return head + "\n".join(lines) + f"\n{out['caveat']} 출처: {out['source']}"
+        if tool == "get_tour_story" and out.get("stories"):
+            body = "\n\n".join(f"[{s['name']}]\n{s['story']}" for s in out["stories"])
+            return f"{body}\n\n{out['caveat']} 출처: {out['source']}"
+        if tool == "get_tour_story" and out.get("status") == "not_found":
+            return f"{out['message']} 정리된 곳: {', '.join(out['available'])}"
         if tool == "get_next_waypoint" and out.get("next"):
             n = out["next"]
             dist = f" 약 {n['distance_m']}m 남았어요." if n.get("distance_m") is not None else ""

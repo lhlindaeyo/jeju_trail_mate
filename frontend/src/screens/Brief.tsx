@@ -61,11 +61,11 @@ function Supplies({ s }: { s: Json }) {
 
 function Weather({ w }: { w: Json }) {
   if (w.status !== "ok") {
-    return <div className="card"><b>앞 6시간 날씨</b><p className="note" style={{ margin: "6px 0 0" }}>{w.message}</p></div>;
+    return <div className="card"><b>하루 날씨</b><p className="note" style={{ margin: "6px 0 0" }}>{w.message}</p></div>;
   }
   return (
     <div className="card">
-      <b>앞 6시간 날씨</b>
+      <b>하루 날씨</b>
       <p className="lead">{w.headline}</p>
       <div className="hours" role="list">
         {w.hours.map((h: Json) => (
@@ -79,8 +79,75 @@ function Weather({ w }: { w: Json }) {
   );
 }
 
+function NextStop({ s }: { s: Json }) {
+  if (s.status !== "ok") {
+    return <div className="card"><b>다음 경유지</b><p className="note" style={{ margin: "6px 0 0" }}>{s.message}</p></div>;
+  }
+  const n = s.next;
+  return (
+    <div className="card">
+      <b>{s.mode === "walking" ? "다음 경유지" : "첫 경유지"}</b>
+      <p className="lead" style={{ marginBottom: 0 }}>
+        {n.name}{n.distance_m != null && <span className="badge" style={{ marginLeft: 8 }}>앞 {dist(n.distance_m)}</span>}
+      </p>
+    </div>
+  );
+}
+
+function Notices({ n }: { n: Json }) {
+  if (n.status !== "ok") {
+    return <div className="card"><b>공지</b><p className="note" style={{ margin: "6px 0 0" }}>{n.message}</p></div>;
+  }
+  return (
+    <div className="card">
+      <b>공지</b>
+      {n.notices.length === 0 && <p className="note" style={{ margin: "6px 0 0" }}>확인된 우회·통제 공지가 없어요.</p>}
+      {n.notices.map((x: Json) => (
+        <div key={x.id} className="place">
+          <span className="grow"><b>{x.title}</b>{x.body && <i>{String(x.body).slice(0, 80)}</i>}</span>
+        </div>
+      ))}
+      {n.caveat && <p className="note" style={{ margin: "8px 0 0" }}>{n.caveat}</p>}
+      {n.official_url && <a href={n.official_url} target="_blank" rel="noopener" style={{ fontSize: 12 }}>공식 공지 확인</a>}
+    </div>
+  );
+}
+
+const ALERT_ICON: Record<string, string> = {
+  pin: '<path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  warn: '<path d="M12 4 3 20h18z"/><path d="M12 10v4M12 17v.5"/>',
+  info: '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8v.5"/>',
+};
+const alertIconFor = (t: string) => (t === "waypoint_arrival" || t === "endpoint_near" ? "pin"
+  : ["schedule_delay", "end_time_risk", "rest_reminder"].includes(t) ? "clock" : ["route_notice", "off_route"].includes(t) ? "warn" : "info");
+
+function ago(iso: string) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
+}
+
+function Alerts({ items }: { items: Json[] }) {
+  return (
+    <>
+      <h2 className="sec">최근 알림</h2>
+      {items.length === 0 && <p className="note">아직 알림이 없어요. 걷기를 시작하면 경유지 도착·일정·공지 알림이 여기에 모여요.</p>}
+      {items.map((n) => (
+        <div key={n.id} className="card alert">
+          <div className={`ic ${n.severity === "safety" ? "safety" : ""}`}><svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{ __html: ALERT_ICON[alertIconFor(n.event_type)] }} /></div>
+          <div className="grow">
+            <b>{n.title}</b>
+            <p>{n.message}</p>
+            <span className={`badge ${n.severity === "safety" ? "safety" : "gray"}`}>{ago(n.created_at)}{n.severity === "safety" ? " · 안전" : ""}</span>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function Brief() {
-  const { trip, session, course, pos, locOn, setLocOn, go } = useApp();
+  const { trip, session, course, pos, locOn, setLocOn, go, notifications } = useApp();
   const [data, setData] = useState<Json | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -142,10 +209,13 @@ export default function Brief() {
       {data && data.mode !== "none" && (
         <>
           <Daylight d={data.daylight} />
-          <Supplies s={data.supplies} />
           <Weather w={data.weather} />
+          <Supplies s={data.supplies} />
+          <NextStop s={data.next_stop} />
+          <Notices n={data.notices} />
         </>
       )}
+      <Alerts items={notifications.slice(0, 5)} />
       {!data && !err && <p className="note">불러오는 중…</p>}
 
       <button className="btn ghost" onClick={load} disabled={busy} style={{ marginTop: 6 }}>{busy ? "확인하는 중…" : "다시 확인"}</button>

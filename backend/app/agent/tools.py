@@ -8,7 +8,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..models import AgentProposal, TrackingSession, Trip, User
-from ..services import brief_service, poi_service, route_service, schedule_service, weather_service
+from ..services import brief_service, poi_service, route_service, schedule_service, tour_service, weather_service
 from ..services.geo import JEJU_CENTER, now_kst
 from ..services.tracking_service import progress_summary, route_progress
 from .llm import ToolSpec
@@ -52,6 +52,14 @@ TOOLS: list[ToolSpec] = [
         },
         "required": ["category"],
     }),
+    ToolSpec("find_tour_spots", "앱에 정리해 둔 대표 관광지 목록을 찾는다. 위치를 알면 가까운 순, 모르면 서귀포 대표 장소부터. "
+             "'근처 관광지', '가볼 만한 곳' 같은 질문에 쓴다. 위치는 대략적이며 출처(자체 정리)를 함께 돌려준다.", {
+        "type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+    }),
+    ToolSpec("get_tour_story", "관광지에 얽힌 이야기(설화·유래)를 조회한다. spot에 관광지 이름을 넣고, 생략하면 가까운(또는 대표) 관광지 몇 곳의 이야기를 돌려준다. "
+             "이야기는 도구가 돌려준 문장만 쓰고 지어내지 않는다.", {
+        "type": "object", "properties": {"spot": {"type": "string", "description": "예: '정방폭포', '외돌개'"}},
+    }),
     ToolSpec("estimate_arrival", "진행 중인 트레킹 세션 기준으로 남은 거리, 예상 도착 시각, 일몰 시각을 계산한다.", {
         "type": "object", "properties": {},
     }),
@@ -77,7 +85,7 @@ TOOLS: list[ToolSpec] = [
         },
         "required": ["reason", "changes"],
     }),
-    ToolSpec("get_trail_brief", "앞길 브리핑: 일몰 대비 도착 예상(늦어도 출발해야 할 시각 포함), 앞쪽 화장실·식당·쉼터, 앞 6시간 날씨를 "
+    ToolSpec("get_trail_brief", "앞길 브리핑: 일몰 대비 도착 예상(늦어도 출발해야 할 시각 포함), 앞쪽 화장실·식당·쉼터, 하루 날씨를 "
              "한 번에 조회한다. '지금 걸어도 되나', '해 지기 전에 도착하나', '앞에 쉴 곳 있나' 같은 질문에 쓴다.", {
         "type": "object", "properties": {},
     }),
@@ -173,6 +181,21 @@ class ToolContext:
             return {"status": "unavailable", "places": [],
                     "message": "현재 위치를 알 수 없습니다. 트레킹 세션을 시작하고 위치 사용을 허용하면 주변 장소를 찾아볼 수 있어요."}
         return poi_service.find_places_near(self.db, loc[0], loc[1], category, radius_m)
+
+    def _tour_origin(self) -> tuple[float, float] | None:
+        loc = self._location()
+        if loc:
+            return loc
+        r = self._default_route()
+        return (r.start_lat, r.start_lon) if r and r.start_lat is not None else None
+
+    def find_tour_spots(self, limit=5):
+        lat, lon = self._tour_origin() or (None, None)
+        return tour_service.find_spots(lat, lon, limit)
+
+    def get_tour_story(self, spot=None):
+        lat, lon = self._tour_origin() or (None, None)
+        return tour_service.get_story(spot, lat, lon)
 
     def estimate_arrival(self):
         s = self.session

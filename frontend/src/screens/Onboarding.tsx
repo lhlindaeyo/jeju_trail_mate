@@ -14,7 +14,7 @@ export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) 
           <div className="card stack">
             <div><strong>PLAN</strong> · 기간·체력·귀환 시각에 맞춘 코스 일정 초안 (승인해야 확정)</div>
             <div><strong>WALK</strong> · 하영올레는 경유지 도착·경로 이탈까지, 제주올레는 거리·공지·일몰 알림</div>
-            <div><strong>AHEAD</strong> · 앞길 브리핑: 일몰 전 도착 여부, 앞쪽 화장실·식당, 앞 6시간 날씨</div>
+            <div><strong>AHEAD</strong> · 앞길 브리핑: 일몰 전 도착 여부, 앞쪽 화장실·식당, 다음 경유지, 공지, 하루 날씨</div>
           </div>
           <div className="card muted small stack">
             <div>위치·마이크 권한은 처음부터 요구하지 않고, 해당 기능을 쓰는 순간에 목적을 설명하고 요청합니다.</div>

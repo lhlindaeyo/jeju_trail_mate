@@ -222,7 +222,7 @@ export default function App() {
   const app = ctx && (
     <AppCtx.Provider value={ctx}>
       <div className="shell" data-page={page}>
-        <div className={page === "home" ? "page" : "page scroll"}><Screen /></div>
+        <div className={page === "home" || page === "ai" ? "page" : "page scroll"}><Screen /></div>
 
         <div className="toasts" role="status" aria-live="polite">
           {toasts.map((n) => (
@@ -236,7 +236,7 @@ export default function App() {
           ))}
         </div>
 
-        {page !== "home" && <div className="fadebot" aria-hidden="true" />}
+        {page !== "home" && page !== "ai" && <div className="fadebot" aria-hidden="true" />}
         <nav className="nav" aria-label="주요 메뉴" style={{ ["--i" as string]: PAGES.indexOf(page) }}>
           <span className="dot" aria-hidden="true" />
           {PAGES.map((p) => (

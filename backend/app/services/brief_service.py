@@ -1,4 +1,4 @@
-"""앞길 브리핑: 지금 위치 기준으로 일몰 대비 도착, 앞쪽 보급 지점, 앞 6시간 날씨를 계산한다.
+"""앞길 브리핑: 지금 위치 기준으로 일몰 대비 도착, 앞쪽 보급 지점, 하루(24시간) 날씨, 다음 경유지, 공지를 계산한다.
 
 저장하는 것이 없다. 요청 때마다 진행 중인 세션(또는 오늘 코스), 일몰 계산, 적재된 공공 장소 데이터,
 기상청 단기예보에서 그 자리에서 만들어 돌려준다. 확인하지 못한 값은 만들어 내지 않고 'unavailable'과
@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from ..models import TrackingSession, TrailRoute, Trip, User
-from . import poi_service, schedule_service, weather_service
+from . import poi_service, route_service, schedule_service, weather_service
 from .geo import haversine_m, now_kst, project_on_path, sunset_kst
-from .tracking_service import progress_summary, route_progress
+from .tracking_service import next_waypoint, progress_summary, route_progress
 
 SUNSET_BUFFER_MIN = 30  # 해 지기 이만큼 전에는 걷기를 마치는 것을 권한다
 TIGHT_MARGIN_MIN = 30  # 도착 예상이 일몰보다 이만큼보다 덜 앞서면 '빠듯함'
@@ -21,7 +21,7 @@ NEARBY_RADIUS_M = 2000  # 경로 좌표가 없는 코스: 내 주변 반경
 AHEAD_WINDOW_M = 5000  # 경로 좌표가 있는 코스: 앞으로 이만큼까지
 OFF_PATH_MAX_M = 300  # 경로에서 이만큼 안쪽의 장소만 '길 위'로 본다
 BEHIND_TOLERANCE_M = 25  # 앞쪽 구간 매칭이 전체 경로 최선 매칭보다 이 이상 멀면 이미 지나온 곳
-WEATHER_HOURS = 6
+WEATHER_HOURS = 24
 RAIN_POP_PCT = 60
 STRONG_WIND_MS = 8.0
 
@@ -140,7 +140,7 @@ def _supplies(db: Session, route: TrailRoute | None, session: TrackingSession | 
             "note": None if on_path else "이 코스는 경로 좌표가 없어 앞쪽이 아니라 내 주변 기준으로 보여 드려요."}
 
 
-# --- 3) 앞 6시간 날씨 -------------------------------------------------------------------
+# --- 3) 하루(24시간) 날씨 -------------------------------------------------------------------
 def _weather(loc: dict | None, now: datetime) -> dict:
     if not loc:
         return {"status": "unavailable", "message": "위치를 알 수 없어 날씨를 확인하지 못했어요."}
@@ -158,12 +158,34 @@ def _weather(loc: dict | None, now: datetime) -> dict:
     if rain_from:
         headline = f"{rain_from['time'][11:16]}쯤부터 비 가능성이 있어요 (강수확률 {rain_from['precip_prob_pct']}%)."
     else:
-        headline = f"앞으로 {WEATHER_HOURS}시간은 비 소식이 없어요."
+        headline = f"앞으로 하루({WEATHER_HOURS}시간) 동안 비 소식이 없어요."
     if max_wind is not None and max_wind >= STRONG_WIND_MS:
         headline += f" 바람이 강해요(최대 {max_wind:g}m/s)."
     return {"status": "ok", "headline": headline, "rain_from_hhmm": rain_from["time"][11:16] if rain_from else None,
             "max_wind_ms": max_wind, "temp_min_c": min(temps) if temps else None, "temp_max_c": max(temps) if temps else None,
             "hours": hours, "source": w["source"], "source_url": w.get("source_url"), "base_time": w["base_time"]}
+
+
+# --- 4) 다음 경유지 · 5) 공지 -------------------------------------------------------------
+def _next_stop(route: TrailRoute | None, session: TrackingSession | None) -> dict:
+    if not route:
+        return {"status": "unavailable", "message": "코스를 고르면 다음 경유지를 알려 드려요."}
+    if session is not None:
+        nxt = next_waypoint(session)
+        if nxt is None:
+            return {"status": "unavailable", "message": "남은 경유지가 없거나 이 코스의 경유지 데이터가 없어요."}
+        return {"status": "ok", "mode": "walking", "next": nxt}
+    first = next((w for w in route.waypoints if w.kind != "S"), None)
+    if first is None:
+        return {"status": "unavailable", "message": "이 코스의 경유지 데이터가 아직 없어요."}
+    return {"status": "ok", "mode": "planned", "next": {"id": first.id, "code": first.code, "name": first.name, "distance_m": None,
+                                                         "location": [first.lat, first.lon] if first.lat is not None else None}}
+
+
+def _notices(db: Session, route: TrailRoute | None) -> dict:
+    if not route:
+        return {"status": "unavailable", "message": "코스를 고르면 우회·통제 공지를 확인해 드려요."}
+    return {"status": "ok", **route_service.notices_payload(db, route)}
 
 
 # --- 묶음 ------------------------------------------------------------------------------
@@ -187,5 +209,7 @@ def build_brief(db: Session, user: User, trip: Trip | None, session: TrackingSes
         "daylight": _daylight(route, session, sched, user, loc, now),
         "supplies": _supplies(db, route, session, loc),
         "weather": _weather(loc, now),
+        "next_stop": _next_stop(route, session),
+        "notices": _notices(db, route),
         "note": "정보는 요청한 순간 계산한 값이에요. 장소 영업 여부는 실시간이 아니며 공식 공지는 별도로 확인하세요.",
     }

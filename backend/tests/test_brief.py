@@ -1,4 +1,4 @@
-"""앞길 브리핑: 일몰 대비 도착, 앞쪽 보급 지점, 앞 6시간 날씨."""
+"""앞길 브리핑: 일몰 대비 도착, 앞쪽 보급 지점, 하루 날씨·다음 경유지·공지."""
 from datetime import datetime, timezone
 
 import pytest
@@ -31,6 +31,7 @@ def test_brief_without_anything(client, auth):
     assert b["mode"] == "none" and b["route"] is None
     assert b["daylight"]["status"] == "unavailable" and b["supplies"]["status"] == "unavailable"
     assert b["weather"]["status"] == "unavailable"
+    assert b["next_stop"]["status"] == "unavailable" and b["notices"]["status"] == "unavailable"
 
 
 def test_planned_daylight_ok_and_late(client, auth):
@@ -149,3 +150,12 @@ def test_companion_answers_from_brief_tool(client, auth):
 def test_old_diary_and_book_endpoints_are_gone(client, auth):
     assert client.post("/v1/diary", headers=auth).status_code == 404
     assert client.get("/v1/books/x", headers=auth).status_code == 404
+
+
+def test_planned_brief_has_first_stop_and_notices(client, auth):
+    rid = route_id(client, "7")
+    b = client.get(f"/v1/brief?route_id={rid}", headers=auth).json()
+    assert b["next_stop"]["status"] in ("ok", "unavailable")
+    if b["next_stop"]["status"] == "ok":
+        assert b["next_stop"]["mode"] == "planned" and b["next_stop"]["next"]["name"]
+    assert b["notices"]["status"] == "ok" and isinstance(b["notices"]["notices"], list)

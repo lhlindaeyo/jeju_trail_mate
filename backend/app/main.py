@@ -9,6 +9,7 @@ from .config import get_settings
 from .db import Base, SessionLocal, engine
 from .routers import brief, me, misc, routes, sessions, trips
 from .services.route_service import seed_routes
+from .services.tour_service import seed_tour_source
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     _drop_removed_photo_consent()
     with SessionLocal() as db:
         seed_routes(db)
+        seed_tour_source(db)
     yield
 
 

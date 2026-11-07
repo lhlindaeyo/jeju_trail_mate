@@ -23,6 +23,7 @@ from pathlib import Path
 from ..config import get_settings
 from ..db import Base, SessionLocal, engine
 from ..services.route_service import seed_routes
+from ..services.tour_service import seed_tour_source
 from . import hayoung_shp, locate_waypoints, olle_csv, poi_csv, poi_sources
 from .common import ImportError_
 
@@ -108,6 +109,7 @@ def main(argv=None) -> int:
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed_routes(db)
+        seed_tour_source(db)
         jobs: list[tuple[str, Path | None]] = []
         if a.kind == "all":
             root = a.folder or Path("../data/raw")
