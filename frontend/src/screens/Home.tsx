@@ -95,7 +95,7 @@ export default function Home() {
       return;
     }
     const ll: [number, number] = pos.onIsland ? [pos.lat, pos.lon] : (course?.path?.[0] ?? course?.start ?? JEJU);
-    const icon = L.divIcon({ className: "", html: '<div class="me-marker"><i></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+    const icon = L.divIcon({ className: "", html: '<div class="me-marker"><span role="img" aria-label="내 위치">🍊</span></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
     if (!meMarker.current.big) {
       meMarker.current.big = L.marker(ll, { icon, keyboard: false, interactive: false }).addTo(m);
       if (mini.current) meMarker.current.small = L.marker(ll, { icon, interactive: false }).addTo(mini.current);
@@ -199,7 +199,6 @@ export default function Home() {
 
       <div className="summary">
         <div className={`avatar ${active ? "rec" : ""}`} aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="#fff" /><path d="M4 21a8 7 0 0 1 16 0z" fill="#fff" /></svg>
         </div>
         <div className="name">
           <b>{course?.name ?? "코스 미선택"}</b>

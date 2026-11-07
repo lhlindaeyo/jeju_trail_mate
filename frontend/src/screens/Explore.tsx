@@ -53,8 +53,8 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
   return (
     <div className="xmap-wrap">
       <div className="xmap" ref={el} role="region" aria-label="제주도 지도" />
-      <div className="xmap-chip" aria-live="polite">
-        {!route ? <span>코스를 고르면 이 지도에 간단히 보여 드려요.</span> : (
+      {route && (
+        <div className="xmap-chip" aria-live="polite">
           <>
             <b>{type === "jeju_olle" ? `올레 ${route.course_no}코스` : route.name}</b>
             <span>
@@ -63,8 +63,8 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
             </span>
             {!drawn && <em>{route.has_geometry ? "경로를 불러오는 중…" : "공식 경로 좌표가 없어 길은 그리지 않았어요"}</em>}
           </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -75,7 +75,6 @@ export default function Explore() {
     try { return (localStorage.getItem("jtm.exploreType") as TT) || "jeju_olle"; } catch { return "jeju_olle"; }
   });
   const [routes, setRoutes] = useState<Json[]>([]);
-  const [bundles, setBundles] = useState<Json[]>([]);
   const [err, setErr] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Json | null>(null);
@@ -85,7 +84,6 @@ export default function Explore() {
     setErr("");
     setSelId(null);
     api(`/v1/routes?trail_type=${type}`).then((r) => setRoutes(r.routes)).catch((e) => setErr(e.message));
-    if (type === "hayoung_olle") api("/v1/routes/hayoung/bundles").then((r) => setBundles(r.bundles)).catch(() => setBundles([]));
     try { localStorage.setItem("jtm.exploreType", type); } catch { /* ignore */ }
   }, [type]);
 
@@ -126,20 +124,6 @@ export default function Explore() {
           서귀포시가 운영하는 도심 올레길이에요. 제주올레 공식 코스와는 별개이며 제주올레 완주에 포함되지 않아요.
           {src && ` (${src.name.replace("[관광, 여행] ", "")}, ${src.ref_date} 수집)`}
         </p>
-      )}
-
-      {type === "hayoung_olle" && bundles.length > 0 && (
-        <div className="card">
-          <b style={{ fontSize: 15 }}>코스 묶음 추천</b>
-          <div className="row wrap" style={{ marginTop: 8 }}>
-            {bundles.map((b) => (
-              <span key={b.label} className={`badge ${b.fits_today === false ? "gray" : ""}`}>
-                {b.label} · {b.courses.join("+")}코스 · {b.distance_km != null ? `${b.distance_km}km · 약 ${Math.round(b.duration_min / 6) / 10}h` : "거리 계산 예정"}
-              </span>
-            ))}
-          </div>
-          <button className="go" style={{ marginTop: 8 }} onClick={() => openSheet("plan")}>일정에 넣기 →</button>
-        </div>
       )}
 
       {routes.map((r) => (

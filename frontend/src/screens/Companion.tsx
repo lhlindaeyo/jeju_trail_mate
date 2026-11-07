@@ -6,7 +6,7 @@ import { listen, voiceSupported } from "../voice";
 type Msg = { role: "me" | "ai"; text: string; meta?: Json; at?: string };
 const EXAMPLES = ["근처 맛집 알려줘", "근처 관광지 알려줘", "관광지와 관련된 이야기 알려줘"];
 const HISTORY_KEY = "jtm.chat";
-const NAME = "돌하르방";
+const NAME = "꼬마하르방 제돌이";
 const AVATAR = "/hareubang.png";
 
 const hhmm = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true }) : "");
@@ -83,7 +83,7 @@ export default function Companion() {
 
       {!chatting ? (
         <div className={`chat-hero ${heroOut ? "out" : ""}`}>
-          <div className="hero-bubble">안녕! 나는 {NAME}이야.<br />걷다가 궁금한 건 뭐든 물어봐!</div>
+          <div className="hero-bubble">안녕! 나는 {NAME}야.<br />걷다가 궁금한 건 뭐든 물어봐!</div>
           <img className="hero-img" src={AVATAR} alt={`${NAME} 캐릭터`} />
           {notes}
         </div>
