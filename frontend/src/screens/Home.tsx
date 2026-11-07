@@ -31,11 +31,9 @@ function splitPath(path: [number, number][], doneM: number): [[number, number][]
 export default function Home() {
   const { course, session, setSession, trip, me, refreshMe, pos, locOn, setLocOn, locMsg, openSheet, toast, pushNotifications, flushGps, go, refreshCourse } = useApp();
   const mapEl = useRef<HTMLDivElement>(null);
-  const miniEl = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
-  const mini = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
-  const meMarker = useRef<{ big?: L.Marker; small?: L.Marker }>({});
+  const meMarker = useRef<L.Marker | null>(null);
   const [spin, setSpin] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -52,13 +50,7 @@ export default function Home() {
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(m);
     layer.current = L.layerGroup().addTo(m);
     map.current = m;
-    if (miniEl.current) {
-      const mm = L.map(miniEl.current, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
-        doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false }).setView(JEJU, 16);
-      L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(mm);
-      mini.current = mm;
-    }
-    return () => { m.remove(); mini.current?.remove(); map.current = null; mini.current = null; meMarker.current = {}; };
+    return () => { m.remove(); map.current = null; meMarker.current = null; };
   }, []);
 
   // route: done = yellow solid, remaining = white dashed, S/F yellow dots, waypoints white
@@ -91,28 +83,18 @@ export default function Home() {
     const m = map.current;
     if (!m) return;
     if (!pos) {
-      meMarker.current.big?.remove(); meMarker.current.small?.remove(); meMarker.current = {};
+      meMarker.current?.remove(); meMarker.current = null;
       return;
     }
     const ll: [number, number] = pos.onIsland ? [pos.lat, pos.lon] : (course?.path?.[0] ?? course?.start ?? JEJU);
     const icon = L.divIcon({ className: "", html: '<div class="me-marker"><span role="img" aria-label="내 위치">🍊</span></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-    if (!meMarker.current.big) {
-      meMarker.current.big = L.marker(ll, { icon, keyboard: false, interactive: false }).addTo(m);
-      if (mini.current) meMarker.current.small = L.marker(ll, { icon, interactive: false }).addTo(mini.current);
+    if (!meMarker.current) {
+      meMarker.current = L.marker(ll, { icon, keyboard: false, interactive: false }).addTo(m);
       m.setView(ll, Math.max(m.getZoom(), 15));
     } else {
-      meMarker.current.big.setLatLng(ll);
-      meMarker.current.small?.setLatLng(ll);
+      meMarker.current.setLatLng(ll);
     }
-    mini.current?.setView(ll, 17, { animate: false });
   }, [pos, course]);
-
-  useEffect(() => {
-    if (!pos && mini.current) {
-      const c = nextWp?.location ?? course?.path?.[0] ?? course?.start;
-      if (c) mini.current.setView(c, 16, { animate: false });
-    }
-  }, [pos, course, nextWp]);
 
   // ---- session controls -----------------------------------------------------------------
   const start = async () => {
@@ -173,7 +155,6 @@ export default function Home() {
         <b /><span>{locOn ? locMsg || "위치 확인 중" : "내 위치 켜기"}</span>
       </button>
 
-      <div className="mini" aria-hidden="true"><div ref={miniEl} /></div>
       <div className="stat">
         <div className="n">{nextWp?.distance_m != null ? (nextWp.distance_m / 1000).toFixed(1) : "—"}<small>km</small></div>
         <div className="l">{nextWp ? `다음 포인트 · ${nextWp.name}` : "다음 포인트까지"}</div>
@@ -183,9 +164,6 @@ export default function Home() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>새로고침
         </button>
       </div>
-      {course && !course.has_geometry && (
-        <div className="maphint">{isHy ? "하영올레 경로 데이터(SHP) 적재 전이라 지도에 길을 그리지 않았어요." : "제주올레 공식 코스는 경로 좌표가 없어 거리 기록만 해요. 길은 현장 리본·간세 표식을 따라 주세요."}</div>
-      )}
 
       <div className="chip2"><div className="n">{course?.course_no ?? "—"}</div><div className="l">코스</div>
         <div className="n">{course?.waypoints?.length ? visitedCount : "—"}</div><div className="l">포인트</div></div>
