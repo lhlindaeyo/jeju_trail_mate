@@ -55,7 +55,7 @@ h2.sec { font-size: 15px; margin: 22px 2px 10px; }
   padding: 7px 12px 7px 10px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
 .locate b { width: 8px; height: 8px; border-radius: 50%; background: #b8c4bf; }
 .locate.on b { background: var(--teal); box-shadow: 0 0 0 4px rgba(15, 143, 155, .2); }
-.stat { position: absolute; left: 16px; top: 130px; width: 124px; background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; z-index: 500; }
+.stat { position: absolute; left: 16px; top: 84px; width: 124px; background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; z-index: 500; }
 .stat .n { font-size: 21px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
 .stat .n small { font-size: 12px; font-weight: 600; margin-left: 2px; }
 .stat .l { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
