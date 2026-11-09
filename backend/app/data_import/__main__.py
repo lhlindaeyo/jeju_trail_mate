@@ -1,18 +1,17 @@
 """Data pipeline CLI (run from backend/).
 
-    python -m app.data_import all          ../data/raw     # every dataset present + both Open APIs
+    python -m app.data_import all          ../data/raw     # every dataset present + the 착한가격업소 Open API
     python -m app.data_import olle         ../data/raw/olle_course_status
     python -m app.data_import hayoung      ../data/raw/hayoung_olle [--inspect]
     python -m app.data_import poi          ../data/raw/poi           # CSV files in the folder
     python -m app.data_import goodprice                              # 서귀포시 착한가격업소 OpenAPI (no key)
-    python -m app.data_import wifi-api     [--dongs 서홍동,동홍동]     # 제주데이터허브 OpenAPI (JEJU_DATAHUB_APPKEY)
     python -m app.data_import locate-waypoints                       # place Hayoung waypoints on the route
     python -m app.data_import juso-inspect [folder]                  # check the downloaded 위치정보 요약DB (default data/raw/juso_entrc)
     python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"   # try every provider in GEOCODER_CHAIN
     python -m app.data_import sbiz-fetch [--sigungu 50130 --classes I1,I2,S2]   # 상가정보 API → data/raw/stores/*.json
     (그 뒤 `goodprice`를 다시 실행하면 상호·주소가 맞는 업소에 좌표가 채워집니다)
 
-Keys are read from the environment or backend/.env (JEJU_DATAHUB_APPKEY, VWORLD_API_KEY, KAKAO_REST_API_KEY).
+Keys are read from the environment or backend/.env (VWORLD_API_KEY, KAKAO_REST_API_KEY).
 """
 import argparse
 import json
@@ -30,7 +29,7 @@ from .common import ImportError_
 
 def _export_keys() -> None:
     s = get_settings()
-    for env, val in (("JEJU_DATAHUB_APPKEY", s.jeju_datahub_appkey), ("KAKAO_REST_API_KEY", s.kakao_rest_api_key)):
+    for env, val in (("KAKAO_REST_API_KEY", s.kakao_rest_api_key),):
         if val and not os.environ.get(env):
             os.environ[env] = val
 
@@ -44,7 +43,7 @@ def _poi_folder(db, folder: Path, a) -> dict:
             out[f.name] = poi_csv.run(db, f.parent, geocode=a.geocode, license=a.license, dry_run=a.dry_run, files=[f])
     hwp = [f.name for f in folder.glob("*.hwp")]
     if hwp:
-        out["guides"] = {"files": hwp, "note": "HWP 활용가이드는 데이터가 아니라 API 사용법 — goodprice / wifi-api 명령으로 적재"}
+        out["guides"] = {"files": hwp, "note": "HWP 활용가이드는 데이터가 아니라 API 사용법 — goodprice 명령으로 적재"}
     return out or {"error": "CSV가 없습니다"}
 
 
@@ -83,7 +82,7 @@ def _geocode_tools(a) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.data_import")
-    ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "wifi-api", "locate-waypoints", "all",
+    ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "locate-waypoints", "all",
                                      "juso-inspect", "geocode", "sbiz-fetch"])
     ap.add_argument("folder", type=Path, nargs="?")
     ap.add_argument("--address", help="geocode: 주소 또는 장소명")
@@ -93,7 +92,6 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--license", help="이용 조건 (예: 공공누리 제1유형)")
     ap.add_argument("--geocode", action="store_true", help="CSV 주소를 카카오로 지오코딩")
-    ap.add_argument("--dongs", help="wifi-api 행정동 목록(쉼표 구분)")
     a = ap.parse_args(argv)
     _export_keys()
 
@@ -118,8 +116,6 @@ def main(argv=None) -> int:
                 if d.exists() and any(p.suffix in (".csv", ".shp") for p in d.iterdir()):
                     jobs.append((kind, d))
             jobs.append(("goodprice", None))
-            if os.environ.get("JEJU_DATAHUB_APPKEY"):
-                jobs.append(("wifi-api", None))
             jobs.append(("locate-waypoints", None))
         else:
             if a.kind in ("olle", "hayoung", "poi") and not a.folder:
@@ -138,9 +134,6 @@ def main(argv=None) -> int:
                     results[kind] = _poi_folder(db, folder, a)
                 elif kind == "goodprice":
                     results[kind] = poi_sources.goodprice_api(db, license=a.license, dry_run=a.dry_run)
-                elif kind == "wifi-api":
-                    dongs = [d.strip() for d in a.dongs.split(",")] if a.dongs else None
-                    results[kind] = poi_sources.wifi_api(db, dongs=dongs, license=a.license, dry_run=a.dry_run)
                 elif kind == "locate-waypoints":
                     results[kind] = locate_waypoints.run(db, dry_run=a.dry_run)
             except ImportError_ as e:

@@ -13,6 +13,7 @@ import httpx
 from app.data_import import hayoung_shp, locate_waypoints, olle_csv, poi_csv, poi_sources
 from app.data_import.common import ImportError_
 from app.db import SessionLocal
+from app.models import PoiPlace
 from app.services.geo import haversine_m, path_length_m, project_on_path
 
 from .conftest import make_trip, route_id
@@ -68,22 +69,6 @@ def write_synthetic_shp(folder: Path, *, with_prj=True, with_course3=False) -> N
         loop = [[n, ORIGIN[1]], [n, ORIGIN[1] + 0.003], [ORIGIN[0] + 0.0002, ORIGIN[1] + 0.003],
                 [ORIGIN[0] + 0.0002, ORIGIN[1]], [n, ORIGIN[1]]]
         write(3, [loop], 2600)
-
-
-def _wifi_transport(points: dict[str, list[float]]):
-    """Fake 제주데이터허브 공공와이파이 API following the HWP guide's response shape."""
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert "/api/proxy/Dtb18ta1btbD1Da1a81aaDttab6tDabb/test-key" in str(request.url)
-        if request.url.params.get("limit") == "1":  # newest-snapshot probe
-            return httpx.Response(200, json={"totCnt": 999, "hasMore": True, "data": [{"baseDate": "20260820"}]})
-        assert request.url.params.get("baseDate") == "20260820"
-        data = [] if request.url.params.get("addressDong") != "서홍동" else [
-            {"baseDate": "20260820", "macAddress": "x", "apGroupName": name, "installLocationDetail": "가로등",
-             "category": "관광지", "categoryDetail": "관광지", "addressDong": "제주특별자치도 서귀포시 서홍동",
-             "addressDetail": f"서귀포시 서홍동 {i}", "latitude": str(lat), "longitude": str(lon)}
-            for i, (name, (lat, lon)) in enumerate(points.items())]
-        return httpx.Response(200, json={"totCnt": len(data), "hasMore": False, "data": data})
-    return httpx.MockTransport(handler)
 
 
 def test_seed_has_both_trail_types(client):
@@ -165,12 +150,6 @@ def test_closed_loop_restarts_at_city_hall():
     assert haversine_m(*r3["start"], *ORIGIN) < 30 and "missing_courses" not in rep
 
 
-def test_wifi_api_requires_appkey(monkeypatch):
-    monkeypatch.delenv("JEJU_DATAHUB_APPKEY", raising=False)
-    with SessionLocal() as db, pytest.raises(ImportError_, match="JEJU_DATAHUB_APPKEY"):
-        poi_sources.wifi_api(db)
-
-
 def test_projection_respects_loop_window():
     path = [perimeter(i / 200) for i in range(201)]
     length = path_length_m(path)
@@ -188,17 +167,19 @@ def hayoung_imported(client):
             info = hayoung_shp.inspect(Path(d))
             assert [l["features"][0]["parts"] for l in info["layers"]] == [6, 1]
             report = hayoung_shp.run(db, Path(d), license="테스트")
-            # Waypoint positions come from an independent dataset (공공와이파이 AP OpenAPI), ~25 m off the path.
+            # Waypoint positions come from an independent dataset (공공와이파이 AP), ~25 m off the path.
             off = 0.00025
             aps = {"법장사골목길": [perimeter(0.1)[0] + off, perimeter(0.1)[1]], "걸매생태공원": [perimeter(0.2)[0] + off, perimeter(0.2)[1]],
                    "천지연폭포": [perimeter(0.3)[0], perimeter(0.3)[1] + off], "먼 곳": [33.40, 126.40]}
-            wifi = poi_sources.wifi_api(db, appkey="test-key", dongs=["서홍동", "동홍동"], client=httpx.Client(transport=_wifi_transport(aps)))
+            db.add_all(PoiPlace(name=name, category="wifi", address=f"서귀포시 서홍동 {i}", detail="관광지", lat=lat, lon=lon,
+                                geo_precision="source", source_id=poi_sources.WIFI_SOURCE, checked_at=datetime.now(timezone.utc),
+                                external_key=f"test:{name}") for i, (name, (lat, lon)) in enumerate(aps.items()))
+            db.commit()
             located = locate_waypoints.run(db, use_geocoder=False)
     r1 = report["routes"]["1"]
     assert r1["dropped_duplicate_parts"] == [3] and r1["repeated_parts"] == [1]  # dup removed, spur walked out and back
     assert r1["start"] == pytest.approx(list(ORIGIN), abs=1e-5)  # shared start of both courses = City Hall
     assert report["missing_courses"] == ["하영올레 3코스"]
-    assert wifi == {"calls": 3, "base_date": "20260820", "places": 4, "with_coords": 4, "ref_date": "20260820"}
     loc = located["routes"]["하영올레 1코스"]
     assert loc["located"] == 3 and loc["direction"] == "경유지 순서와 일치", loc
     return route_id(client, "1", "hayoung_olle")

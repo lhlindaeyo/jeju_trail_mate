@@ -53,7 +53,6 @@ ADMIN_TOKEN=<긴 임의 문자열>
 LLM_CHAIN=ollama,mock          # AI: Ollama(qwen3:4b) → 없으면 오프라인 mock
 KMA_SERVICE_KEY=               # 공공데이터포털 일반 인증키: 기상청 단기예보
 SBIZ_SERVICE_KEY=              # 같은 포털: 소상공인 상가정보 (sbiz-fetch)
-JEJU_DATAHUB_APPKEY=           # 제주데이터허브 프로젝트키
 GEOCODER_CHAIN=local,stores
 ```
 
@@ -90,7 +89,6 @@ cd backend
 | `hayoung` | 코스별 SHP(조각난 다중 선)를 이어 붙여 걷는 순서의 순환 경로로 복원: 중복 선 제거, 새섬 같은 왕복 구간은 두 번, 공시 거리와 비교 |
 | `poi` | 공공와이파이 관광지 AP CSV(주소만) |
 | `goodprice` | 서귀포시 착한가격업소 OpenAPI(키 불필요) |
-| `wifi-api` | 제주데이터허브 공공와이파이 OpenAPI(`JEJU_DATAHUB_APPKEY`, 위도·경도 포함) |
 | `locate-waypoints` | 좌표가 있는 장소 이름과 경유지 이름을 맞춰, 경로 150m 안이면 경로 위로 붙여 경유지 체크인을 켬. 진행 방향도 검증 |
 
 ### 키가 없을 때
@@ -99,7 +97,6 @@ cd backend
 - 아무것도 없으면(`ANTHROPIC_API_KEY`·`LLM_CHAIN` 없음) → 오프라인 모드(키워드로 도구 조회 결과만 답함).
 - `KMA_SERVICE_KEY` 없음 → "예보 확인 필요", 비 알림 꺼짐.
 - 주소 → 좌표 변환기(`GEOCODER_CHAIN`: `local`=위치정보 요약DB, `stores`=상가정보·인허가 업소 목록과 상호·주소 매칭, `vworld`, `kakao`)가 하나도 없으면 착한가격업소 등 주소만 있는 장소는 "주소 기준 목록"으로만 안내. 브이월드·카카오(기본 설정)는 약관상 결과 저장이 안 되어 보고서의 "제안"으로만 나오고 DB에는 쓰지 않습니다. 확인: `python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"`.
-- `JEJU_DATAHUB_APPKEY` 없음 → 공공와이파이 좌표가 없어 하영올레 경유지 도착 알림은 출발·도착점만.
 
 ## 알려진 제약
 
