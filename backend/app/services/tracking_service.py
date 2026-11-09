@@ -150,6 +150,43 @@ def next_waypoint(s: TrackingSession) -> dict | None:
     return None
 
 
+def pace_targets(s: TrackingSession, prefs) -> dict | None:
+    """Where the user's own settings say to stop next.
+
+    * rest: a break every `rest_every_minutes` at `pace_kmh` → one rest segment = pace × interval.
+    * day goal: `daily_distance_target_km` walked in this session.
+    Both are capped at the course end. With path data each target snaps to the last waypoint at or
+    before it (so you never plan to stop past your limit); without it only distances are given."""
+    route = s.route
+    prog = route_progress(s)
+    if not route or prog["done_m"] is None:
+        return None
+    done, length = prog["done_m"], route.distance_km * 1000
+    rest_every = prefs.rest_every_minutes or 0
+    seg_m = prefs.pace_kmh * 1000 * rest_every / 60 if rest_every >= 30 else None
+    goal_m = max(prefs.daily_distance_target_km * 1000 - walked_m(s), 0.0)
+    rest_at = min(done + seg_m, length) if seg_m else None
+    goal_at = min(done + goal_m, length)
+
+    def snap(target: float | None) -> dict | None:
+        if target is None or not route.has_geometry:
+            return None
+        cands = [w for w in route.waypoints if w.kind != "S" and w.along_m is not None and done < w.along_m <= target + 1]
+        w = max(cands, key=lambda x: x.along_m, default=None)
+        return {"name": w.name, "distance_m": round(w.along_m - done), "location": [w.lat, w.lon] if w.lat is not None else None} if w else None
+
+    return {
+        "rest_interval_min": rest_every or None,
+        "rest_segment_km": round(seg_m / 1000, 2) if seg_m else None,
+        "next_rest_in_km": round((rest_at - done) / 1000, 2) if rest_at is not None else None,
+        "next_rest_point": snap(rest_at),
+        "daily_target_km": prefs.daily_distance_target_km,
+        "daily_remaining_km": round(goal_m / 1000, 2),
+        "day_goal_point": snap(goal_at),
+        "day_goal_reaches_course_end": goal_at >= length,
+    }
+
+
 NOTES = {
     "route_geometry": "진행률은 하영올레 경로 데이터(제주데이터허브 SHP) 위에 GPS 위치를 맞춰 계산했습니다.",
     "gps_distance": "진행률은 GPS 누적 거리를 코스 총거리로 나눈 추정치입니다(공식 경로 좌표 없음).",

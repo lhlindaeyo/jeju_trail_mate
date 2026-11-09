@@ -213,8 +213,13 @@ def _summarize(tool: str, out: Any) -> str:
 
             def line(p: dict) -> str:
                 where = f"{p['distance_m']}m" if p.get("distance_m") is not None else (p.get("address") or "주소 미상")
-                extra = f" · {p['detail'][:40]}" if p.get("detail") else ""
-                return f"- {p['name']} ({where}){extra}"
+                tag = f" [{p['badge']}]" if p.get("badge") else ""
+                # detail = "메뉴 가격, 메뉴 가격 · 휴무" — show the first three menu items, never cut mid-price.
+                menu = (p.get("detail") or "").split(" · ")[0].strip(", ")
+                items = re.split(r",\s+", menu)
+                extra = f" · {', '.join(items[:3])}" if menu else ""
+                phone = f" · ☎ {p['phone']}" if p.get("phone") else ""
+                return f"- {p['name']}{tag} ({where}){extra}{phone}"
 
             head = f"{out['message']}\n" if out.get("message") else ""
             return head + "\n".join(line(p) for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"

@@ -131,6 +131,7 @@ def test_goodprice_api_and_address_only_fallback(client):
     # no coordinates → listed by address and clearly not called "nearby"
     assert res["status"] == "address_only" and res["places"][0]["name"] == "바다해호텔"
     assert res["places"][0]["distance_m"] is None and "좌표가 없어" in res["message"]
+    assert res["places"][0]["badge"] == "착한가격업소" and res["places"][0]["phone"] == "064-762-5300"
 
 
 def test_shp_missing_prj_is_reported():

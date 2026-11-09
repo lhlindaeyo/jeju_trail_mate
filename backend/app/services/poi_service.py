@@ -29,8 +29,13 @@ def _closed(status: str | None) -> bool:
     return bool(status) and any(w in status for w in CLOSED_WORDS)
 
 
+GOODPRICE_SOURCE = "seogwipo_goodprice"
+GOODPRICE_BADGE = "착한가격업소"
+
+
 def _place(p: PoiPlace, d: float | None) -> dict:
     return {"name": p.name, "category": p.category, "address": p.address, "phone": p.phone, "detail": p.detail,
+            "badge": GOODPRICE_BADGE if p.source_id == GOODPRICE_SOURCE else None,
             "distance_m": round(d) if d is not None else None, "location": [p.lat, p.lon] if p.lat is not None else None,
             "location_precision": p.geo_precision, "source_id": p.source_id}
 

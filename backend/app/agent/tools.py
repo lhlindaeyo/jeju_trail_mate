@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..models import AgentProposal, TrackingSession, Trip, User
 from ..services import brief_service, poi_service, route_service, schedule_service, tour_service, weather_service
 from ..services.geo import JEJU_CENTER, now_kst
-from ..services.tracking_service import progress_summary, route_progress
+from ..services.tracking_service import pace_targets, progress_summary, route_progress
 from .llm import ToolSpec
 
 TOOLS: list[ToolSpec] = [
@@ -31,7 +31,8 @@ TOOLS: list[ToolSpec] = [
         "type": "object",
         "properties": {"route": {"type": "string", "description": "예: '하영올레 1코스'. 생략 시 현재 세션/오늘 코스"}},
     }),
-    ToolSpec("get_next_waypoint", "진행 중인 세션 기준 다음 경유지와 남은 거리, 지금까지 지나온 경유지를 조회한다.", {
+    ToolSpec("get_next_waypoint", "진행 중인 세션 기준 다음 경유지와 남은 거리, 지나온 경유지, 그리고 사용자의 설정(하루 목표 거리·휴식 간격·속도)에 맞춘 "
+             "다음 휴식 지점과 오늘 목표 지점(my_pace_targets)을 조회한다.", {
         "type": "object", "properties": {},
     }),
     ToolSpec("get_route_notices", "코스의 공식 우회·통제·안전 공지와 마지막 공지 확인 시각을 조회한다. route 생략 시 오늘 일정/진행 중 세션의 코스.", {
@@ -148,6 +149,7 @@ class ToolContext:
         if not nxt:
             return {"status": "unavailable", "message": "이 코스에는 다음 경유지 정보가 없습니다.", "visited": summary["visited_waypoints"]}
         return {"next": nxt, "visited": summary["visited_waypoints"], "progress_basis": summary["progress_basis"],
+                "my_pace_targets": pace_targets(s, self.prefs),
                 "gps_accuracy_m": summary["gps_accuracy_m"],
                 "message": None if nxt["distance_m"] is not None else "경로 데이터가 없어 거리를 계산하지 않았습니다."}
 
