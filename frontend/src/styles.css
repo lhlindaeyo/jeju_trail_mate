@@ -300,3 +300,12 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .xmap-chip em { display: block; font-style: normal; font-size: 11px; color: var(--warn-ink); }
 .course { cursor: pointer; }
 .course.sel { box-shadow: 0 0 0 2px var(--teal), var(--shadow-soft); }
+
+/* 하루치 일정 블록 */
+.blocks { display: flex; flex-direction: column; gap: 8px; }
+.block { background: #fff; border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow-soft); border-left: 4px solid var(--teal); display: flex; flex-direction: column; gap: 6px; cursor: grab; }
+.block.rest { border-left-color: #c9c9c9; }
+.block.dragging { opacity: .45; }
+.block input[type="text"] { width: 100%; }
+.block .chip { min-height: 30px; padding: 4px 10px; }
+.block .chip:disabled { opacity: .35; }
