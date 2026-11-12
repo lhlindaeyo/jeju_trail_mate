@@ -12,6 +12,7 @@ from ..models import GpsPoint, TrackingSession, WaypointVisit
 from .geo import KST, as_utc, haversine_m, hhmm_to_minutes, project_on_path, valid_coordinate
 
 MAX_WALKING_SPEED_MS = 4.0  # ~14 km/h — faster segments are treated as GPS jumps / vehicle
+SIM_SPEEDUP_MAX = 20  # the web app's demo location simulator (points with source="sim") fast-forwards up to 20×
 RAW_POINT_RETENTION_DAYS = 30
 ROUTE_MATCH_ACCURACY_M = 30.0  # fixes worse than this never move progress or trigger check-ins
 OFF_ROUTE_M = 50.0  # distance from the path that counts as "possibly off route" (tune in field test)
@@ -69,8 +70,9 @@ def ingest_points(db: Session, s: TrackingSession, points: list[dict]) -> dict:
         if good and s.last_lat is not None and s.last_point_at is not None:
             seg = haversine_m(s.last_lat, s.last_lon, lat, lon)
             dt = (ts - _aware(s.last_point_at)).total_seconds()
-            # ignore jitter (< accuracy) and implausible jumps
-            if dt > 0 and seg / dt <= MAX_WALKING_SPEED_MS and seg >= min(acc or 5.0, 15.0):
+            # ignore jitter (< accuracy) and implausible jumps; a fast-forwarded demo walk may go SIM_SPEEDUP_MAX× faster
+            max_speed = MAX_WALKING_SPEED_MS * (SIM_SPEEDUP_MAX if p.get("source") == "sim" else 1)
+            if dt > 0 and seg / dt <= max_speed and seg >= min(acc or 5.0, 15.0):
                 s.distance_m += seg
         if good:
             s.last_lat, s.last_lon, s.last_point_at = lat, lon, ts

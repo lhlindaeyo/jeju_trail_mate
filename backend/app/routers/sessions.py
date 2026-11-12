@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -67,6 +68,7 @@ class PointIn(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     accuracy_m: float | None = Field(default=None, ge=0, le=10000)
+    source: Literal["device", "sim"] = "device"  # "sim" = demo location simulator in the web app
 
 
 class PointsIn(BaseModel):

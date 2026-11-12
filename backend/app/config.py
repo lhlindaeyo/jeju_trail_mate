@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     admin_token: str | None = None  # required for /v1/admin/* (course & notice management)
+    # Public demo (`npm run share`): every browser gets its own user, keyed by its X-Device-Id header.
+    # Off = the one local user (the operating-PC setup).
+    per_device_users: bool = False
 
     # AI. LLM_CHAIN (comma-separated, tried in order) wins over LLM_PROVIDER when set.
     # Names: ollama | gemini | groq | openrouter | openai (any OpenAI-compatible URL) | anthropic | mock

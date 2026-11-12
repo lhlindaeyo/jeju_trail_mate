@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { api, gpsQueue } from "../api";
 import { useApp } from "../App";
+import { SIM_SPEEDS, sim, useSim } from "../sim";
 
 const YELLOW = "#FFC83D";
 const JEJU: [number, number] = [33.38, 126.55];
@@ -28,8 +29,37 @@ function splitPath(path: [number, number][], doneM: number): [[number, number][]
   return [path, []];
 }
 
+/** Demo mode ("가상 위치") controls: walk the course, fast-forward, step off the route. */
+function SimPanel() {
+  const s = useSim((x) => x);
+  const { locOn, setLocOn, setSimOn } = useApp();
+  const play = () => { if (!locOn) setLocOn(true); sim.play(); };
+  return (
+    <div className="simpanel" role="group" aria-label="가상 위치 시뮬레이터">
+      <div className="simhead"><b>가상 위치</b><span className="badge yellow">시연</span>
+        <button type="button" className="simoff" onClick={() => setSimOn(false)} aria-label="가상 위치 끄기">끄기</button></div>
+      {s.hasPath ? (
+        <>
+          <input type="range" min={0} max={Math.round(s.total)} step={10} value={Math.round(s.along)}
+            onChange={(e) => { if (!locOn) setLocOn(true); sim.seek(Number(e.target.value)); }} aria-label="코스 위의 위치" />
+          <div className="simkm">{s.free ? "코스 밖 지점" : `${(s.along / 1000).toFixed(2)} / ${(s.total / 1000).toFixed(1)} km`}</div>
+          <div className="simrow">
+            <button type="button" className="simplay" onClick={s.playing ? () => sim.pause() : play}>{s.playing ? "멈춤" : s.along >= s.total ? "처음부터" : "걷기"}</button>
+            {SIM_SPEEDS.map((v) => (
+              <button key={v} type="button" className="simspeed" aria-pressed={s.speed === v} onClick={() => sim.setSpeed(v)}>{v}×</button>
+            ))}
+          </div>
+          <button type="button" className={`simoffroute ${s.offRoute ? "on" : ""}`} aria-pressed={s.offRoute} onClick={() => sim.toggleOffRoute()}>
+            {s.offRoute ? "코스로 돌아가기" : "길 벗어나기 (80m)"}</button>
+        </>
+      ) : <p className="simnote">이 코스는 경로 좌표가 없어 자동 걷기를 할 수 없어요.</p>}
+      <p className="simnote">지도를 누르면 그곳으로 이동해요.</p>
+    </div>
+  );
+}
+
 export default function Home() {
-  const { course, session, setSession, trip, me, refreshMe, pos, locOn, setLocOn, locMsg, openSheet, toast, pushNotifications, flushGps, go, refreshCourse } = useApp();
+  const { course, session, setSession, trip, me, refreshMe, pos, locOn, setLocOn, locMsg, openSheet, toast, pushNotifications, flushGps, go, refreshCourse, simOn } = useApp();
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
@@ -49,6 +79,7 @@ export default function Home() {
     const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(JEJU, 10);
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(m);
     layer.current = L.layerGroup().addTo(m);
+    m.on("click", (e: L.LeafletMouseEvent) => { if (sim.snap.enabled) sim.teleport(e.latlng.lat, e.latlng.lng); });
     map.current = m;
     return () => { m.remove(); map.current = null; meMarker.current = null; };
   }, []);
@@ -93,6 +124,7 @@ export default function Home() {
       m.setView(ll, Math.max(m.getZoom(), 15));
     } else {
       meMarker.current.setLatLng(ll);
+      if (!m.getBounds().contains(ll)) m.panTo(ll); // keep a moving (e.g. simulated) position on screen
     }
   }, [pos, course]);
 
@@ -152,8 +184,9 @@ export default function Home() {
         <button className="menu" aria-label="메뉴" onClick={() => openSheet("menu")}><i /></button>
       </header>
       <button className={`locate ${locOn ? "on" : ""}`} type="button" onClick={() => setLocOn(!locOn)} aria-pressed={locOn}>
-        <b /><span>{locOn ? locMsg || "위치 확인 중" : "내 위치 켜기"}</span>
+        <b /><span>{locOn ? locMsg || "위치 확인 중" : simOn ? "가상 위치 켜기" : "내 위치 켜기"}</span>
       </button>
+      {simOn && <SimPanel />}
 
       <div className="stat">
         <div className="n">{nextWp?.distance_m != null ? (nextWp.distance_m / 1000).toFixed(1) : "—"}<small>km</small></div>

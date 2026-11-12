@@ -137,3 +137,21 @@ def test_agent_proposal_needs_user_approval(client, auth):
     assert d["status"] == "approved"
     assert d["plan"][0]["approved"]["route"] is None and d["plan"][0]["approved"]["revision"] > before["revision"]
     assert client.post(f"/v1/trips/{trip}/proposals/{pid}/decision", headers=auth, json={"approve": True}).status_code == 409
+
+
+def test_sim_points_may_fast_forward(client, auth):
+    """The web demo simulator (source="sim") fast-forwards a walk; real device points at that speed are jumps."""
+    trip = make_trip(client, auth)
+    rid = route_id(client, "7")
+    now = datetime.now(timezone.utc)
+    # ~50 m every 2.5 s ≈ 20 m/s (5× walking speed limit)
+    fast = [{**p, "timestamp": (now + timedelta(seconds=2.5 * i)).isoformat()} for i, p in enumerate(_points(now, 10))]
+    for source, counted in (("device", False), ("sim", True)):
+        sid = client.post("/v1/sessions", headers=auth, json={"trip_id": trip, "route_id": rid}).json()["session_id"]
+        out = client.post(f"/v1/sessions/{sid}/points", headers=auth,
+                          json={"points": [{**p, "source": source} for p in fast]}).json()
+        assert out["accepted"] == 10
+        assert (out["distance_m"] > 400) is counted, (source, out["distance_m"])
+        client.post(f"/v1/sessions/{sid}/end", headers=auth)
+    bad = client.post(f"/v1/sessions/{sid}/points", headers=auth, json={"points": [{**fast[0], "source": "x"}]})
+    assert bad.status_code == 422

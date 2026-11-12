@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, gpsQueue, isOnboarded, type Json } from "./api";
+import { sim, useSim } from "./sim";
 import Splash from "./screens/Splash";
 import Onboarding from "./screens/Onboarding";
 import Home from "./screens/Home";
@@ -16,6 +17,7 @@ const TRIP_KEY = "jtm.tripId";
 const JEJU_BOUNDS = { minLat: 33.0, maxLat: 33.7, minLon: 126.0, maxLon: 127.0 };
 const MIN_POINT_INTERVAL_MS = 15_000;
 const FLUSH_INTERVAL_MS = 60_000;
+const SIM_FLUSH_INTERVAL_MS = 10_000; // demo walks move faster, so the map catches up sooner
 const SPLASH_MIN_MS = 1800; // how long the splash stays at least, even when data is ready sooner
 const SPLASH_FADE_MS = 900; // must match the splash exit animation in styles.css
 
@@ -30,6 +32,7 @@ type Ctx = {
   toast: (msg: string) => void; pushNotifications: (n: Json[]) => void; notifications: Json[];
   locOn: boolean; setLocOn: (on: boolean) => void; pos: Position | null; locMsg: string;
   flushGps: () => Promise<void>;
+  simOn: boolean; setSimOn: (on: boolean) => void;
 };
 const AppCtx = createContext<Ctx | null>(null);
 export const useApp = () => {
@@ -86,6 +89,8 @@ export default function App() {
   const [locOn, setLocOn] = useState(false);
   const [pos, setPos] = useState<Position | null>(null);
   const [locMsg, setLocMsg] = useState("");
+  const simOn = useSim((s) => s.enabled);
+  const setSimOn = useCallback((on: boolean) => sim.setEnabled(on), []);
   const lastPoll = useRef<string | null>(null);
   const lastPointAt = useRef(0);
   const pillTimer = useRef<number | undefined>(undefined);
@@ -165,6 +170,7 @@ export default function App() {
     try { setCourse(await api(`/v1/routes/${id}`)); } catch { setCourse(null); }
   }, [effectiveCourseId, trip]);
   useEffect(() => { if (me) refreshCourse(); }, [me, refreshCourse]);
+  useEffect(() => { sim.setCourse(course?.id ?? null, course?.path, course?.start); }, [course]);
   const setCourseId = (id: string | null) => { setCourseIdState(id); store(COURSE_KEY, id); };
   const setTripId = (id: string) => { setTripIdState(id); store(TRIP_KEY, id); };
 
@@ -179,29 +185,33 @@ export default function App() {
   const recording = Boolean(session && session.status === "active" && session.tracking_mode === "gps");
   useEffect(() => {
     if (!locOn) { setPos(null); setLocMsg(""); return; }
-    if (!("geolocation" in navigator)) { setLocMsg("이 기기에서는 위치를 쓸 수 없어요"); setLocOn(false); return; }
+    if (!simOn && !("geolocation" in navigator)) { setLocMsg("이 기기에서는 위치를 쓸 수 없어요"); setLocOn(false); return; }
     setLocMsg("위치 확인 중");
-    const watch = navigator.geolocation.watchPosition((p) => {
+    const geo = simOn ? sim : navigator.geolocation; // demo mode: simulated walk instead of the device GPS
+    const watch = geo.watchPosition((p) => {
       const { latitude: lat, longitude: lon, accuracy: acc } = p.coords;
       const onIsland = lat > JEJU_BOUNDS.minLat && lat < JEJU_BOUNDS.maxLat && lon > JEJU_BOUNDS.minLon && lon < JEJU_BOUNDS.maxLon;
       setPos({ lat, lon, acc, onIsland });
-      setLocMsg(onIsland ? `실시간 · 오차 ${Math.round(acc)}m` : "제주 밖 · 예시 위치 표시");
-      if (recording && onIsland && Date.now() - lastPointAt.current >= MIN_POINT_INTERVAL_MS) {
+      setLocMsg(simOn ? "가상 위치 · 시연 모드" : onIsland ? `실시간 · 오차 ${Math.round(acc)}m` : "제주 밖 · 예시 위치 표시");
+      // a fast-forwarded demo walk records proportionally more often, so points stay ~19 m apart like real walking
+      const gap = simOn ? MIN_POINT_INTERVAL_MS / sim.snap.speed : MIN_POINT_INTERVAL_MS;
+      if (recording && onIsland && Date.now() - lastPointAt.current >= gap) {
         lastPointAt.current = Date.now();
-        gpsQueue.push(session!.session_id, { timestamp: new Date(p.timestamp).toISOString(), lat, lon, accuracy_m: acc });
+        gpsQueue.push(session!.session_id, { timestamp: new Date(p.timestamp).toISOString(), lat, lon, accuracy_m: acc,
+          ...(simOn ? { source: "sim" as const } : {}) });
       }
     }, (e) => {
       setLocOn(false);
       toast(e.code === e.PERMISSION_DENIED ? "위치 권한을 허용해 주세요" : "위치를 가져오지 못했어요");
     }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
-    return () => navigator.geolocation.clearWatch(watch);
-  }, [locOn, recording, session?.session_id, toast]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => geo.clearWatch(watch);
+  }, [locOn, simOn, recording, session?.session_id, toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!recording) return;
-    const t = setInterval(flushGps, FLUSH_INTERVAL_MS);
+    const t = setInterval(flushGps, simOn ? SIM_FLUSH_INTERVAL_MS : FLUSH_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [recording, flushGps]);
+  }, [recording, simOn, flushGps]);
 
   const act = async (n: Json, action: Json | string) => {
     const id = typeof action === "string" ? action : action.id;
@@ -216,6 +226,7 @@ export default function App() {
   const ctx: Ctx | null = me && {
     me, refreshMe, trips, trip, setTripId, refreshTrips, session, setSession, course, setCourseId, refreshCourse,
     go, openSheet: setSheet, toast, pushNotifications, notifications, locOn, setLocOn, pos, locMsg, flushGps,
+    simOn, setSimOn,
   };
   const Screen = { home: Home, explore: Explore, ai: Companion, brief: Brief }[page];
 

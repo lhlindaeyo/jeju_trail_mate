@@ -16,6 +16,21 @@ export async function clearLocalData() {
   try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
 }
 
+// Random id for this browser. The server ignores it in single-user mode; on the public demo
+// (PER_DEVICE_USERS) it gives every tester their own user. Kept when local data is erased.
+const DEVICE_KEY = "jtm.deviceId";
+let deviceId: string | null = null;
+function getDeviceId(): string {
+  if (deviceId) return deviceId;
+  deviceId = safeGet(DEVICE_KEY);
+  if (!deviceId || !/^[A-Za-z0-9_-]{16,64}$/.test(deviceId)) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16)); // works on plain http too, unlike randomUUID
+    deviceId = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    safeSet(DEVICE_KEY, deviceId);
+  }
+  return deviceId;
+}
+
 export const ONBOARDED_KEY = "jtm.onboarded";
 export const isOnboarded = () => safeGet(ONBOARDED_KEY) === "1";
 export const markOnboarded = () => safeSet(ONBOARDED_KEY, "1");
@@ -25,7 +40,7 @@ export class ApiError extends Error {
 }
 
 export async function api<T = Json>(path: string, opts: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "X-Device-Id": getDeviceId() };
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
@@ -47,7 +62,7 @@ export async function api<T = Json>(path: string, opts: { method?: string; body?
 }
 
 // ---- GPS batching with an offline queue -------------------------------------------
-export type GpsPoint = { timestamp: string; lat: number; lon: number; accuracy_m: number | null };
+export type GpsPoint = { timestamp: string; lat: number; lon: number; accuracy_m: number | null; source?: "sim" };
 
 export const gpsQueue = {
   load(): { sessionId: string; points: GpsPoint[] } | null {
