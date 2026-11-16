@@ -111,7 +111,7 @@ function routesLabel(s: Json) {
 }
 
 export default function Plan() {
-  const { trip, trips, setTripId, refreshCourse } = useApp();
+  const { trip, trips, setTripId, refreshTrips, refreshCourse, setSession } = useApp();
   const [routes, setRoutes] = useState<Json[]>([]);
   const [bundles, setBundles] = useState<Json[]>([]);
   const [plan, setPlan] = useState<Json[]>([]);
@@ -121,6 +121,7 @@ export default function Plan() {
   const [msg, setMsg] = useState("");
   const [creating, setCreating] = useState(false);
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const load = useCallback(async () => {
     const [r, b] = await Promise.all([api("/v1/routes"), api("/v1/routes/hayoung/bundles")]);
@@ -138,7 +139,7 @@ export default function Plan() {
     try { await fn(); await load(); await refreshCourse(); if (ok) setMsg(ok); } catch (e) { setMsg((e as Error).message); }
   };
   const generate = () => run(() => api(`/v1/trips/${trip.id}/plan`, { body: { route_ids: picked.length ? picked : null, trail_type: type } }),
-    "초안을 만들었어요. 확인 후 승인해야 확정돼요.");
+    "초안을 만들었어요. 확인 후 '일정 등록'을 눌러 주세요.");
   const tripDays = Math.round((Date.parse(trip.end_date) - Date.parse(trip.start_date)) / 86400000) + 1;
   const suggest = async () => {
     setMsg("");
@@ -154,9 +155,20 @@ export default function Plan() {
       return { date: d.toISOString().slice(0, 10), route_id: b.rest ? null : b.route_ids[0] ?? null,
         extra_route_ids: b.rest ? [] : b.route_ids.slice(1), planned_start: b.rest || !b.start ? null : b.start, note: b.text || null };
     });
-    return run(() => api(`/v1/trips/${trip.id}/plan/changes`, { body: changes }), "블록을 초안으로 저장했어요. 확인 후 승인해야 확정돼요.");
+    return run(() => api(`/v1/trips/${trip.id}/plan/changes`, { body: changes }), "블록을 초안으로 저장했어요. 확인 후 '일정 등록'을 눌러 주세요.");
   };
-  const approveAll = () => run(() => api(`/v1/trips/${trip.id}/plan/approve`, { body: {} }), "일정을 확정했어요.");
+  const approveAll = () => run(() => api(`/v1/trips/${trip.id}/plan/approve`, { body: {} }), "일정을 등록했어요.");
+  const removeTrip = async () => {
+    setMsg("");
+    setConfirmDel(false);
+    try {
+      await api(`/v1/trips/${trip.id}`, { method: "DELETE" });
+      setPlan([]); setProposals([]); setBlocks([]); setPicked([]);
+      await refreshTrips();
+      setSession((await api("/v1/sessions/current")).session);
+      await refreshCourse();
+    } catch (e) { setMsg((e as Error).message); }
+  };
   const decide = (id: string, approve: boolean) => run(() => api(`/v1/trips/${trip.id}/proposals/${id}/decision`, { body: { approve } }));
   const shown = routes.filter((r) => r.trail_type === type);
   const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
@@ -164,7 +176,7 @@ export default function Plan() {
   return (
     <div>
       {trips.length > 1 && (
-        <select value={trip.id} onChange={(e) => setTripId(e.target.value)} aria-label="여행 선택" style={{ marginBottom: 10 }}>
+        <select value={trip.id} onChange={(e) => { setConfirmDel(false); setTripId(e.target.value); }} aria-label="여행 선택" style={{ marginBottom: 10 }}>
           {trips.map((t) => <option key={t.id} value={t.id}>{t.title} ({t.start_date} ~ {t.end_date})</option>)}
         </select>
       )}
@@ -179,14 +191,21 @@ export default function Plan() {
 
       <div className="card">
         <div className="row"><b className="grow" style={{ fontSize: 15 }}>{trip.title}</b>
-          {plan.some((d) => d.pending_draft) && <button className="btn sm" onClick={approveAll}>초안 승인</button>}</div>
+          {plan.some((d) => d.pending_draft) && <button className="btn sm" onClick={approveAll}>일정 등록</button>}
+          <button className="btn sm ghost" onClick={() => setConfirmDel(true)} disabled={confirmDel}>여행 삭제</button></div>
+        {confirmDel && (
+          <div role="alertdialog" aria-label="여행 삭제 확인" style={{ margin: "8px 0" }}>
+            <p className="err" style={{ margin: "0 0 6px" }}>"{trip.title}" 여행을 삭제할까요? 일정과 걷기 기록이 모두 지워지고 되돌릴 수 없어요.</p>
+            <div className="row"><button className="btn sm" onClick={removeTrip}>삭제</button><button className="btn sm ghost" onClick={() => setConfirmDel(false)}>취소</button></div>
+          </div>
+        )}
         {plan.length === 0 && <p className="note">아직 일정이 없어요. 아래에서 길을 고르고 초안을 만들어 보세요.</p>}
         {plan.map((d) => (
           <div key={d.date} className={`day ${d.pending_draft ? "pending" : d.approved ? "approved" : ""}`}>
             <b style={{ fontSize: 14 }}>{fmtDate(d.date)}</b>
-            {d.approved && <div style={{ fontSize: 13 }}><span className="badge">확정</span> {routesLabel(d.approved)} {d.approved.planned_start && `· ${d.approved.planned_start}–${d.approved.planned_end ?? "?"}`}
+            {d.approved && <div style={{ fontSize: 13 }}><span className="badge">등록</span> {routesLabel(d.approved)} {d.approved.planned_start && `· ${d.approved.planned_start}–${d.approved.planned_end ?? "?"}`}
               <div className="note" style={{ margin: 0 }}>{d.approved.route && d.approved.note}</div></div>}
-            {d.pending_draft && <div style={{ fontSize: 13, marginTop: 4 }}><span className="badge yellow">승인 대기</span> {routesLabel(d.pending_draft)} {d.pending_draft.planned_start && `· ${d.pending_draft.planned_start}–${d.pending_draft.planned_end ?? "?"}`}
+            {d.pending_draft && <div style={{ fontSize: 13, marginTop: 4 }}><span className="badge yellow">등록 대기</span> {routesLabel(d.pending_draft)} {d.pending_draft.planned_start && `· ${d.pending_draft.planned_start}–${d.pending_draft.planned_end ?? "?"}`}
               <div className="note" style={{ margin: 0 }}>{d.pending_draft.route && d.pending_draft.note}</div></div>}
           </div>
         ))}

@@ -2,12 +2,12 @@ from datetime import date as Date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import AgentProposal, Trip, User
+from ..models import AgentProposal, Notification, Trip, User
 from ..services import schedule_service
 from ..services.geo import now_kst
 from .common import audit, not_found, owned_trip
@@ -75,6 +75,11 @@ def update_trip(trip_id: str, body: TripPatch, user: User = Depends(current_user
 def delete_trip(trip_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     t = owned_trip(db, user, trip_id)
     audit(db, user.id, "trip_deleted", "trip", t.id)
+    # Notifications only keep the session id as plain text (no foreign key), so clear them here
+    # or alerts from the deleted trip's walks would keep showing up.
+    session_ids = [s.id for s in t.sessions]
+    if session_ids:
+        db.execute(delete(Notification).where(Notification.session_id.in_(session_ids)))
     db.delete(t)
     db.commit()
 
