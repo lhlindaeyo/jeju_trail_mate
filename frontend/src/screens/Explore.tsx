@@ -121,7 +121,7 @@ export default function Explore() {
               <b>{type === "jeju_olle" ? `올레 ${r.course_no}코스 · ${r.subtitle ?? ""}` : r.name}</b>
               <span>
                 {type === "jeju_olle"
-                  ? `${r.distance_km?.toFixed(1)} km · ${dur(r) ?? "시간 정보 없음"} · ${r.start_point} - ${r.end_point}`
+                  ? `${r.distance_km?.toFixed(1)} km · ${dur(r) ?? "시간 정보 없음"}${r.start_point && r.end_point ? ` · ${r.start_point} - ${r.end_point}` : ""}`
                   : `서귀포시청 출발·도착 · 경유지 ${r.waypoints.length - 2}곳 · ${r.distance_km != null ? `${r.distance_km} km` : "거리 계산 예정"}`}
               </span>
             </div>

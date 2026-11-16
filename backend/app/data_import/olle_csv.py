@@ -42,15 +42,28 @@ def normalize_course_no(text: str) -> str:
     return re.sub(r"^(\d+)([AB])$", r"\1-\2", no)
 
 
+def place_list(text: str) -> list[str] | None:
+    """18-2 lists the places along the course instead of a start-end pair: '신양항·졸복산·…·추자면사무소'.
+    (A '·' inside a start-end pair names alternatives, e.g. '상추자항·신양항CU편의점-…', so a dash wins.)"""
+    t = (text or "").strip()
+    if re.search(r"[-–~]", t):
+        return None
+    parts = [p.strip() for p in t.split("·") if p.strip()]
+    return parts if len(parts) >= 3 else None
+
+
 def split_endpoints(text: str) -> tuple[str | None, str | None]:
-    """'시흥초등학교-광치기해변' → (start, end). Values without a single separator stay as start only."""
+    """'시흥초등학교-광치기해변' → (start, end); a place list gives its first and last place."""
     t = (text or "").strip()
     if not t:
         return None, None
+    places = place_list(t)
+    if places:
+        return places[0], places[-1]
     parts = re.split(r"\s*[-–~]\s*", t)
     if len(parts) == 2:
         return parts[0], parts[1]
-    return None, None  # e.g. 18-2 lists the places along the course, not a start/end pair
+    return None, None
 
 
 def clean_title(text: str) -> str:
@@ -127,7 +140,7 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
         route.duration_min_low, route.duration_min_high = lo, hi
         if title:
             route.tags = [title]
-            if c_both and not start_pt and r.get(c_both):
+            if c_both and place_list(r.get(c_both, "")):
                 route.tags = [title, f"경유: {r[c_both]}"]
         if start_pt:
             route.start_point = start_pt

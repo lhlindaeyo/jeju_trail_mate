@@ -96,7 +96,8 @@ def test_olle_csv_parsing():
     assert olle_csv.clean_title("온평?표선(A)") == "온평-표선(A)"
     assert olle_csv.course_no_from("18-1코스", "추자도A") == "18-1"
     assert olle_csv.split_endpoints("시흥초등학교-광치기해변") == ("시흥초등학교", "광치기해변")
-    assert olle_csv.split_endpoints("신양항·졸복산·추자교") == (None, None)
+    assert olle_csv.split_endpoints("신양항·졸복산·추자교·추자면사무소") == ("신양항", "추자면사무소")
+    assert olle_csv.split_endpoints("상추자항·신양항CU편의점-상추자항·신양항CU편의점") == ("상추자항·신양항CU편의점", "상추자항·신양항CU편의점")
 
 
 def test_olle_csv_import_real_layout(client):

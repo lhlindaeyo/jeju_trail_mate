@@ -167,7 +167,8 @@ export default function Home() {
 
   const isHy = course?.trail_type === "hayoung_olle";
   const region = !course ? "코스탐색에서 걸을 길을 골라 주세요"
-    : isHy ? "서귀포시 · 서귀포시청 순환" : `${course.start_point} → ${course.end_point}`;
+    : isHy ? "서귀포시 · 서귀포시청 순환"
+    : course.start_point && course.end_point ? `${course.start_point} → ${course.end_point}` : course.name;
   const visitedCount = active ? session.visited_waypoints.filter((n: string) => n !== "서귀포시청제1청사").length : 0;
 
   return (
