@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
         from .agent.llm import get_llm
 
         return {"ok": True, "ai_provider": get_llm().name,
-                "weather": bool(s.kma_service_key)}
+                "weather": bool(s.kma_apihub_key or s.kma_service_key)}
 
     return app
 

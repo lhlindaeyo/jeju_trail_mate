@@ -15,7 +15,8 @@
 ## 2. 키·계정
 
 - [ ] **Anthropic API 키** → `backend/.env`의 `ANTHROPIC_API_KEY` (AI 자유 대화·일기 초안)
-- [ ] **기상청 단기예보 키**(공공데이터포털) → `KMA_SERVICE_KEY`
+- [ ] **기상청 API허브 키**(apihub.kma.go.kr, 단기예보 조회서비스 신청) → `KMA_APIHUB_KEY`
+- [ ] (대체) **기상청 단기예보 키**(공공데이터포털) → `KMA_SERVICE_KEY` — 현재 키는 단기예보 서비스에 활용신청이 안 되어 403(코드 30)
 - [ ] **도로명주소 위치정보 요약DB(제주)** 신청·다운로드 → `data/raw/juso_entrc/` (juso.go.kr, 심사 필요). 그 뒤 `python -m app.data_import juso-inspect`, 착한가격업소 재적재(`goodprice`). 이 파일은 키가 필요 없고 오프라인이라 센터 실행환경에도 적합
 - [x] **상가(상권)정보 API** — 키 설정·내려받기·착한가격업소 재적재 완료(2026-11-07): 87곳 중 80곳에 좌표(상호 일치 65, 같은 건물 15). 남은 7곳은 상가정보에 그 주소의 업소가 없어 주소 목록으로 안내. 인허가 음식점 CSV를 `data/raw/stores/`에 넣으면 더 채울 수 있음
 - [ ] (선택) 브이월드 키 → `VWORLD_API_KEY`·`VWORLD_DOMAIN` — 남은 경유지 이름의 위치를 "제안"으로 확인(저장 불가 약관). 최종 좌표는 현장 GPS로 확정

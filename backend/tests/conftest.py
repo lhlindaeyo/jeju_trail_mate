@@ -8,6 +8,7 @@ os.environ.update({
     "LLM_CHAIN": "",  # a developer's .env may set a chain; tests always run offline on the mock
     "ADMIN_TOKEN": "test-admin",
     "KMA_SERVICE_KEY": "",
+    "KMA_APIHUB_KEY": "",
     
     "APP_ENV": "test",
 })
