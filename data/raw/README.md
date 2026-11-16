@@ -8,6 +8,8 @@
 | `olle_course_status/` | 제주특별자치도_올레코스현황 CSV | 있음 (29개 코스, 기준일 2026-07-31) |
 | `olle_official/` | `road_endpoints.json` — 제주올레 공식 홈페이지 코스 페이지 스크립트에서 뽑은 코스별 시작·종점 좌표 (`python -m app.data_import olle-fetch`로 받음) | 29개 코스 (2026-11-16). 경로선은 없음. 사진·글·지도 이미지는 쓰지 않음 |
 | `olle_osm/` | `overpass_olle_relations.json` — OpenStreetMap 제주올레 route relation (`olle-fetch`로 받음, ODbL) | 21개 relation 중 공식 거리 ±12%·시작·종점 500m 이내를 통과한 1·2·11·19·20코스만 적재 (2026-11-16) |
+| `olle_map_images/` | `map_<코스>.jpg` — 공식 코스 안내지도 이미지 (`olle-fetch`가 받음). 경로 위치 추정용으로만 쓰고 앱에서 보여 주지 않음 | 29장 (2026-11-16) |
+| `olle_traced/` | `traces.json`(안내지도에서 따라 그린 대략 선), `ways_<코스>.json`(그 주변 OSM 보행로), `overlays/`(검토용 이미지) | 17개 코스 적재 (1-1, 3-A, 3-B, 4, 5, 6, 7, 9, 10, 10-1, 14-1, 15-A, 16, 17, 18-1, 18-2, 21). 7-1, 8, 12, 13, 14, 15-B, 18은 검증 탈락 (2026-11-16) |
 | `poi/` | 공공와이파이 관광지 AP CSV, 서귀포시 착한가격업소 OpenAPI 활용가이드(HWP) | 있음 |
 | `juso_entrc/` | **도로명주소 위치정보 요약DB** 제주특별자치도 파일(.txt 또는 .zip) — 주소 → 좌표 변환용(공공누리 1유형, 출처표시) | 승인 대기. 받은 뒤 `python -m app.data_import juso-inspect`로 형식 확인 |
 
@@ -25,6 +27,8 @@ cd backend
 ```
 
 제주올레 좌표·경로는 먼저 `.venv/Scripts/python -m app.data_import olle-fetch`로 받은 뒤 `all`(또는 `olle-endpoints` → `olle-osm` 순서)로 적재합니다. OSM 경로는 공식 시작·종점 좌표로 검증하므로 `olle-endpoints`가 먼저 돌아야 합니다.
+
+OSM에 없는 코스는 공식 안내지도로 추정합니다: `python tools/olle_map_trace.py`(Pillow·NumPy가 있는 Python, 앱 venv에는 없음) → `.venv/Scripts/python -m app.data_import olle-traced`. 지도 이미지의 픽셀 위치는 `backend/app/data/olle_map_trace.json`에 사람이 읽어 적어 둔 값입니다.
 
 `all`은 폴더의 CSV·SHP·JSON, 서귀포시 착한가격업소 OpenAPI(키 불필요), 하영올레 경유지 위치 보정을 차례로 실행합니다.
 

@@ -38,6 +38,15 @@
    "note": "자원봉사자가 그린 경로라 일부 코스만 있음. 공식 거리(±12%)·시작·종점(500m 이내)과 맞는 코스만 적재. olle-fetch → olle-osm."
   },
   {
+   "id": "olle_map_traced",
+   "name": "제주올레 코스 안내지도 기반 추정 경로",
+   "provider": "사단법인 제주올레 안내지도(선 모양) + © OpenStreetMap contributors(보행로)",
+   "platform_url": "https://www.jejuolle.org/trail#/",
+   "ref_date": null,
+   "license": "확인 필요 (안내지도는 위치 추정에만 사용·재배포 안 함 / 보행로 ODbL 1.0)",
+   "note": "공식 안내지도 이미지의 코스 선을 따라 그린 뒤(tools/olle_map_trace.py), 그 선에 가까운 실제 OSM 보행로를 이어 만든 추정 경로. 공식 거리 ±15% 안의 코스만 적재. 실제 리본·간세 표시를 우선."
+  },
+  {
    "id": "seogwipo_food",
    "name": "제주특별자치도 서귀포시_휴게음식점현황",
    "provider": "서귀포시 (공공데이터포털 15055973)",

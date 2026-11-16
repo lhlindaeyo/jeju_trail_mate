@@ -7,7 +7,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.data_import import olle_official, olle_osm
+from app.data_import import olle_official, olle_osm, olle_traced
 from app.data_import.common import ImportError_
 from app.db import SessionLocal
 from app.models import TrailRoute
@@ -50,6 +50,14 @@ def test_fetch_follows_hashed_assets():
     with tempfile.TemporaryDirectory() as d, pytest.raises(ImportError_, match="5개만"):
         # five distinct courses is far fewer than the real 29 → treated as a site change
         olle_official.fetch(Path(d), client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_map_image_per_course_component():
+    js = ('__name:"COURSE_01",x="https://contents.ollepass.org/a/road_01_photo01.jpg",'
+          'm="https://contents.ollepass.org/a/road_01_map_pc_2025.jpg";'
+          '__name:"COURSE_03_A",m="https://contents.ollepass.org/a/road_03_map_pc_2026.jpg";__name:"COURSE_04",y=1')
+    assert olle_official.parse_map_images(js) == {"01": "https://contents.ollepass.org/a/road_01_map_pc_2025.jpg",
+                                                  "03_A": "https://contents.ollepass.org/a/road_03_map_pc_2026.jpg"}
 
 
 def test_course_no_from_osm_tags():
@@ -119,6 +127,63 @@ def test_endpoints_then_osm_import(client, course99):
             assert r.has_geometry and len(r.segments) == 2
             assert haversine_m(*r.path[0], *START) < 1 and haversine_m(*r.path[-1], *end) < 1
             assert r.distance_km == 2.0  # official distance is kept, the line only draws the course
+
+
+EAST = 0.0016  # ≈ 150 m east of the straight line
+
+
+def _ladder() -> list[dict]:
+    """Two parallel streets joined at both ends: the straight west one and an east one 150 m away."""
+    west = line(0, 20)
+    east = [[lat, lon + EAST] for lat, lon in west]
+    way = lambda pts: {"type": "way", "geometry": [{"lat": a, "lon": b} for a, b in pts]}
+    return [way(west), way(east), way([west[0], east[0]]), way([west[-1], east[-1]])]
+
+
+def test_corridor_follows_the_sketch_not_the_shortest_way():
+    sketch = [[lat + 0.00005, lon + EAST + 0.0002] for lat, lon in line(0, 20)]  # east street, ~20 m off
+    path = olle_traced.corridor_route(_ladder(), sketch, [line(0, 0)[0], line(20, 20)[0]])
+    assert all(abs(p[1] - (START[1] + EAST)) < 1e-6 for p in path[1:-1])
+    assert abs(path_length_m(path) - 2300) < 40
+
+
+def test_align_pulls_an_offset_sketch_onto_the_street():
+    street = line(0, 20)
+    way = {"type": "way", "geometry": [{"lat": a, "lon": b} for a, b in street]}
+    sketch = [[lat, lon + 0.0009] for lat, lon in street]  # whole line drawn ≈ 85 m east
+    aligned = olle_traced.align_sketch(sketch, [way], [street[0], street[-1]])
+    mid = aligned[len(aligned) // 2]
+    assert haversine_m(*mid, *street[10]) < 15
+
+
+def test_traced_import_loads_checked_routes(client, course99):
+    with SessionLocal() as db:
+        r = _route99(db)
+        r.start_lat, r.start_lon = START
+        r.end_lat, r.end_lon = line(20, 20)[0]
+        r.distance_km = 2.3
+        db.commit()
+    with tempfile.TemporaryDirectory() as d:
+        folder = Path(d)
+        # like a real map line: from the start point across to the east street, up it, and back to the end point
+        sketch = [line(0, 0)[0]] + [[lat, lon + EAST] for lat, lon in line(0, 20)] + [line(20, 20)[0]]
+        (folder / olle_traced.FILE_NAME).write_text(json.dumps({"generated_at": "2026-11-16T00:00:00", "courses": {
+            "99": {"trace": sketch, "via": [], "controls_used": 4},
+            "98": {"error": "map_98.jpg 없음"}}}), encoding="utf-8")
+        (folder / "ways_99.json").write_text(json.dumps({"elements": _ladder()}), encoding="utf-8")
+        with SessionLocal() as db:
+            rep = olle_traced.run(db, folder, client=httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(500))))
+            assert rep["loaded"]["99"]["length_km"] == pytest.approx(2.3, abs=0.05)
+            assert "98" in rep["skipped"]
+            r = _route99(db)
+            assert r.has_geometry and r.segments[0].source_id == "olle_map_traced"
+            detail = client.get(f"/v1/routes/{r.id}").json()
+            assert "추정" in detail["geometry_attribution"]
+            # a sketch that does not fit the official distance is rejected
+            r.distance_km = 4.0
+            db.commit()
+            rep = olle_traced.run(db, folder)
+            assert "99" in rep["rejected"] and any("길이" in p for p in rep["rejected"]["99"]["problems"])
 
 
 def test_osm_import_rejects_mismatch(client, course99):
