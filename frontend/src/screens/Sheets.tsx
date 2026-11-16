@@ -25,7 +25,7 @@ function Frame({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export function MenuSheet({ onClose }: { onClose: () => void }) {
-  const { openSheet, me, simOn, setSimOn, go } = useApp();
+  const { openSheet, simOn, setSimOn, go } = useApp();
   return (
     <Frame title="메뉴" onClose={onClose}>
       <div className="menu-list">
@@ -36,7 +36,6 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
           <div>가상 위치 (시연 모드)<span>제주 밖에서도 코스를 따라 걷는 것처럼 시험해요</span></div>
           <span className={`badge ${simOn ? "yellow" : "gray"}`}>{simOn ? "켜짐" : "꺼짐"}</span></button>
       </div>
-      <p className="note">AI {me.ai_provider === "mock" ? "오프라인 모드" : me.ai_provider}</p>
       <p className="note">JEJU TRAIL MATE는 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아닙니다. 이 앱은 구조·구급 서비스가 아닙니다.</p>
     </Frame>
   );

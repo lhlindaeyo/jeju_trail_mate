@@ -35,7 +35,7 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
           daily_distance_target_km: Number(p.daily_distance_target_km), pace_kmh: Number(p.pace_kmh),
           walk_start_time: p.walk_start_time, walk_end_time: p.walk_end_time, rest_every_minutes: Number(p.rest_every_minutes),
           interests: p.interests, notification_settings: p.notification_settings,
-          consent_ai_processing: p.consents.ai_processing, consent_memory: p.consents.memory,
+          consent_ai_processing: p.consents.ai_processing,
           consent_location: p.consents.location, consent_microphone: p.consents.microphone,
         },
       });
@@ -62,11 +62,9 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
       </div>
 
       <div className="card">
-        <h2>동의 (각각 철회 가능)</h2>
+        <h2>동의</h2>
         <label className="toggle"><input type="checkbox" checked={p.consents.ai_processing} onChange={(e) => setConsent("ai_processing", e.target.checked)} />
           <span><strong>AI 처리</strong><br /><span className="muted small">질문과 현재 코스 상황을 외부 AI(Anthropic Claude)로 보내 답변을 만듭니다. 원시 GPS 기록은 보내지 않습니다.</span></span></label>
-        <label className="toggle"><input type="checkbox" checked={p.consents.memory} onChange={(e) => setConsent("memory", e.target.checked)} />
-          <span><strong>개인화 기억</strong><br /><span className="muted small">관심사를 AI 맥락에 사용합니다. 끄면 저장된 관심사가 삭제됩니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.location} onChange={(e) => setConsent("location", e.target.checked)} />
           <span><strong>위치 기록</strong><br /><span className="muted small">트레킹 세션을 시작했을 때만 위치를 기록합니다. 원시 위치는 세션 종료 30일 후 삭제됩니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.microphone} onChange={(e) => setConsent("microphone", e.target.checked)} />
@@ -93,11 +91,10 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
 }
 
 export default function Settings() {
-  const { refreshMe, me } = useApp();
+  const { refreshMe } = useApp();
 
   return (
     <div>
-      <p className="muted small">AI: {me.ai_provider === "mock" ? "오프라인 모드(도구 조회만)" : me.ai_provider}</p>
       <PrefsForm onSaved={refreshMe} />
     </div>
   );

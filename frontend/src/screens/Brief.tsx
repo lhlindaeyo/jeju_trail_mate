@@ -23,10 +23,6 @@ function Daylight({ d }: { d: Json }) {
           ? <div><span>남은 거리</span><b>{d.remaining_km}km</b></div>
           : <div><span>늦어도 출발</span><b>{d.latest_start_hhmm}</b></div>}
       </div>
-      <p className="note" style={{ margin: "10px 0 0" }}>
-        해 지기 {d.buffer_min}분 전({d.finish_by_hhmm})까지 마치는 것을 기준으로 해요. {d.assumptions}
-        {d.confidence === "low" && " 지금은 GPS 신호가 약하거나 오래되어 추정이 부정확할 수 있어요."}
-      </p>
     </div>
   );
 }
@@ -39,7 +35,6 @@ function Supplies({ s }: { s: Json }) {
     <div className="card">
       <b>{s.basis === "along_route" ? "앞쪽 화장실·식당·쉼터" : "내 주변 화장실·식당·쉼터"}</b>
       <p className="note" style={{ margin: "2px 0 6px" }}>{s.scope}</p>
-      {s.note && <p className="note" style={{ margin: "0 0 6px" }}>{s.note}</p>}
       {s.groups.map((g: Json) => (
         <div key={g.category} className="supply">
           <h3>{g.label}</h3>
@@ -52,9 +47,6 @@ function Supplies({ s }: { s: Json }) {
           ))}
         </div>
       ))}
-      <p className="note" style={{ margin: "8px 0 0" }}>
-        {s.caveat} {s.sources.length > 0 && `출처: ${s.sources.map((x: Json) => `${x.name}(${x.ref_date ?? "기준일 미상"})`).join(", ")}`}
-      </p>
     </div>
   );
 }
@@ -74,7 +66,6 @@ function Weather({ w }: { w: Json }) {
           </div>
         ))}
       </div>
-      <p className="note" style={{ margin: "8px 0 0" }}>출처: {w.source} (발표 {w.base_time})</p>
     </div>
   );
 }
@@ -107,7 +98,6 @@ function Notices({ n }: { n: Json }) {
           <span className="grow"><b>{x.title}</b>{x.body && <i>{String(x.body).slice(0, 80)}</i>}</span>
         </div>
       ))}
-      {n.caveat && <p className="note" style={{ margin: "8px 0 0" }}>{n.caveat}</p>}
       {n.official_url && <a href={n.official_url} target="_blank" rel="noopener" style={{ fontSize: 12 }}>공식 공지 확인</a>}
     </div>
   );
@@ -127,7 +117,18 @@ function ago(iso: string) {
   return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
 }
 
-function Alerts({ items }: { items: Json[] }) {
+/** 알림 종류(event_type)마다 가장 최신 1개만 남긴다. 지난 알림은 화면에서 계속 빼고, 서버 기록은 그대로 둔다. */
+function latestPerType(items: Json[]): Json[] {
+  const newest = new Map<string, Json>();
+  for (const n of items) {
+    const cur = newest.get(n.event_type);
+    if (!cur || new Date(n.created_at).getTime() > new Date(cur.created_at).getTime()) newest.set(n.event_type, n);
+  }
+  return [...newest.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+function Alerts({ items: all }: { items: Json[] }) {
+  const items = latestPerType(all);
   return (
     <>
       <h2 className="sec">최근 알림</h2>
@@ -215,11 +216,10 @@ export default function Brief() {
           <Notices n={data.notices} />
         </>
       )}
-      <Alerts items={notifications.slice(0, 5)} />
+      <Alerts items={notifications} />
       {!data && !err && <p className="note">불러오는 중…</p>}
 
       <button className="btn ghost" onClick={load} disabled={busy} style={{ marginTop: 6 }}>{busy ? "확인하는 중…" : "다시 확인"}</button>
-      <p className="note">{data?.note ?? "정보는 요청한 순간 계산하고 저장하지 않아요."}</p>
     </section>
   );
 }
