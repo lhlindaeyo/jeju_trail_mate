@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
+import PageHead from "./PageHead";
 
 const REFRESH_MS = 60_000;
 const STATUS_LABEL: Record<string, string> = { ok: "여유 있어요", tight: "빠듯해요", late: "일몰 이후 도착", done: "코스 끝", unavailable: "확인 불가" };
@@ -182,11 +183,13 @@ export default function Brief() {
   const fromStart = data?.location?.source === "route_start";
   return (
     <section aria-label="앞길브리핑">
-      <h1 className="title">앞길 브리핑</h1>
-      <p className="sub">
-        {data?.route ? `${data.route.name} · ${data.mode === "walking" ? "걷는 중" : "출발 전"}` : "지금 걸어도 되는지, 앞에 뭐가 있는지 한눈에"}
-        {at && ` · ${at} 기준`}
-      </p>
+      <PageHead
+        title="앞길 브리핑"
+        sub={<>
+          {data?.route ? `${data.route.name} · ${data.mode === "walking" ? "걷는 중" : "출발 전"}` : "지금 걸어도 되는지, 앞에 뭐가 있는지 한눈에"}
+          {at && ` · ${at} 기준`}
+        </>}
+      />
 
       {err && <p className="err">{err}</p>}
       {data && ageMin >= 10 && (

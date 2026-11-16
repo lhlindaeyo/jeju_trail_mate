@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
+import PageHead from "./PageHead";
 
 type TT = "jeju_olle" | "hayoung_olle";
 
@@ -51,7 +52,6 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
     }
   }, [route?.id, detail, path.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const drawn = path.length > 1;
   return (
     <div className="xmap-wrap">
       <div className="xmap" ref={el} role="region" aria-label="제주도 지도" />
@@ -63,8 +63,6 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
               {route.start_point && route.end_point ? ` · ${route.start_point} → ${route.end_point}` : ""}
               {route.distance_km != null ? ` · ${Number(route.distance_km).toFixed(1)}km` : ""}
             </span>
-            {!drawn && <em>{route.has_geometry ? "경로를 불러오는 중…" : "검증된 경로 좌표가 없어 길은 그리지 않았어요"}</em>}
-            {drawn && detail?.geometry_attribution && <em>{detail.geometry_attribution}</em>}
           </>
         </div>
       )}
@@ -107,8 +105,7 @@ export default function Explore() {
 
   return (
     <section aria-label="코스탐색">
-      <h1 className="title">코스탐색</h1>
-      <p className="sub">걷고 싶은 길을 고르세요.</p>
+      <PageHead title="코스탐색" sub="걷고 싶은 길을 고르세요." />
       <div className="seg" role="group" aria-label="길 종류">
         <button type="button" aria-pressed={type === "jeju_olle"} onClick={() => setType("jeju_olle")}>제주올레</button>
         <button type="button" aria-pressed={type === "hayoung_olle"} onClick={() => setType("hayoung_olle")}>하영올레</button>
