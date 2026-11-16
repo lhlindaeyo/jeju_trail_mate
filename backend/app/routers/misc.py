@@ -3,14 +3,15 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..agent import orchestrator
 from ..auth import current_user, require_admin
 from ..db import get_db
-from ..models import AuditEvent, Notification, RouteNotice, TrackingSession, Trip, User
-from ..rules.engine import notification_to_dict
+from .. import push
+from ..models import AuditEvent, Notification, PushSubscription, RouteNotice, TrackingSession, Trip, User
+from ..rules.engine import EVENT_TYPES, REMOVED_ACTIONS, notification_to_dict
 from ..services.route_service import find_route, route_to_dict
 from .common import audit, not_found, owned_session, owned_trip
 
@@ -21,10 +22,13 @@ router = APIRouter(prefix="/v1")
 
 @router.get("/notifications", tags=["notifications"])
 def list_notifications(since: datetime | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    q = select(Notification).where(Notification.user_id == user.id)
+    # Only kinds the app still makes: a database from an older version holds e.g. 'journal_prompt' ('오늘의 기록')
+    # from the removed diary feature, whose buttons lead nowhere.
+    q = select(Notification).where(Notification.user_id == user.id, Notification.event_type.in_(EVENT_TYPES))
     if since:
         q = q.where(Notification.created_at > since.astimezone(timezone.utc))
-    items = list(db.scalars(q.order_by(Notification.created_at.desc()).limit(100)))
+    items = [n for n in db.scalars(q.order_by(Notification.created_at.desc()).limit(100))
+             if not any(a.get("id") in REMOVED_ACTIONS for a in (n.actions or []))]
     now = datetime.now(timezone.utc)
     for n in items:
         if n.delivered_at is None:
@@ -47,7 +51,69 @@ def act(notification_id: str, body: ActionIn, user: User = Depends(current_user)
     return notification_to_dict(n)
 
 
+# --- phone notifications (Web Push) -------------------------------------------------------
+
+
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=10, max_length=200)
+    auth: str = Field(min_length=8, max_length=100)
+
+
+class PushSubIn(BaseModel):
+    endpoint: str = Field(pattern=r"^https://", max_length=1000)
+    keys: PushKeys
+
+
+class PushUnsubIn(BaseModel):
+    endpoint: str = Field(max_length=1000)
+
+
+@router.get("/push/config", tags=["notifications"])
+def push_config(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    subs = db.scalar(select(func.count()).select_from(PushSubscription).where(PushSubscription.user_id == user.id))
+    return {**push.status(), "subscriptions": subs}
+
+
+@router.post("/push/subscribe", tags=["notifications"])
+def push_subscribe(body: PushSubIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    sub = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == body.endpoint))
+    if sub is None:
+        sub = PushSubscription(user_id=user.id, endpoint=body.endpoint, p256dh=body.keys.p256dh, auth=body.keys.auth)
+        db.add(sub)
+    else:  # same browser re-subscribing (new keys, or now another profile on this device)
+        sub.user_id, sub.p256dh, sub.auth, sub.failures = user.id, body.keys.p256dh, body.keys.auth, 0
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/push/unsubscribe", tags=["notifications"])
+def push_unsubscribe(body: PushUnsubIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    sub = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == body.endpoint,
+                                                   PushSubscription.user_id == user.id))
+    if sub:
+        db.delete(sub)
+        db.commit()
+    return {"ok": True}
+
+
+@router.post("/push/test", tags=["notifications"])
+def push_test(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Sends a sample alert to this user's phones, so they can see it on the banner / lock screen."""
+    st = push.status()
+    if not st["enabled"]:
+        return {**st, "sent": 0}
+    out = push.send(db, user.id, {"id": "test", "title": "JEJU TRAIL MATE 알림 확인",
+                                  "body": "이렇게 잠금화면과 상단 배너에 알림이 와요.", "severity": "info", "url": "/#brief"})
+    return {**st, **out}
+
+
 # --- AI companion -------------------------------------------------------------------
+
+
+class ChatLocation(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    accuracy_m: float | None = None
 
 
 class ChatIn(BaseModel):
@@ -55,6 +121,7 @@ class ChatIn(BaseModel):
     trip_id: str | None = None
     session_id: str | None = None
     history: list[dict] = Field(default_factory=list, max_length=20)
+    location: ChatLocation | None = None  # current phone position; used only with location consent
 
 
 @router.post("/agent/chat", tags=["agent"])
@@ -65,7 +132,10 @@ def chat(body: ChatIn, user: User = Depends(current_user), db: Session = Depends
         session = db.scalar(select(TrackingSession).where(TrackingSession.trip_id == trip.id, TrackingSession.status != "ended"))
     if trip is None and session is not None:
         trip = session.trip
-    return orchestrator.chat(db, user, body.message, trip, session, body.history)
+    loc = body.location
+    usable = loc is not None and (loc.accuracy_m is None or loc.accuracy_m <= 500)  # a coarse fix says nothing about 'here'
+    return orchestrator.chat(db, user, body.message, trip, session, body.history,
+                             location=(loc.lat, loc.lon) if usable else None)
 
 
 # --- data rights (single local user) -------------------------------------------------------------
@@ -97,6 +167,7 @@ def export_data(user: User = Depends(current_user), db: Session = Depends(get_db
 def delete_account(user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Erases the local user's rows (cascade). The next request starts a fresh profile."""
     uid = user.id
+    db.query(PushSubscription).filter(PushSubscription.user_id == uid).delete()  # stop phone alerts too
     db.delete(user)
     db.add(AuditEvent(user_id=uid, event_type="account_deleted", resource_type="user", resource_id=uid))
     db.commit()

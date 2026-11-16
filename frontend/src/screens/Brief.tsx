@@ -43,7 +43,7 @@ function Supplies({ s }: { s: Json }) {
           {g.places.map((p: Json) => (
             <div key={p.name + p.distance_m} className="place">
               <span className="where">{p.ahead_m != null ? `앞 ${dist(p.ahead_m)}` : dist(p.distance_m)}</span>
-              <span className="grow"><b>{p.name}</b>{p.detail && <i>{String(p.detail).slice(0, 40)}</i>}</span>
+              <span className="grow"><b>{p.name}</b></span>
             </div>
           ))}
         </div>
@@ -52,36 +52,50 @@ function Supplies({ s }: { s: Json }) {
   );
 }
 
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+/** '2026-11-16T14:00:00+09:00' → '11/16(월)'. Read off the KST date in the string, not the device clock's zone. */
+function dayLabel(iso: string, long = false) {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const wd = WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return long ? `${m}월 ${d}일 (${wd})` : `${m}/${d}(${wd})`;
+}
+
+/** Consecutive runs of hours on the same date: [{day: '2026-11-16T…', from: 0, count: 5}, …] */
+function days(hours: Json[]) {
+  const out: { day: string; from: number; count: number }[] = [];
+  hours.forEach((h, i) => {
+    const last = out[out.length - 1];
+    if (last && last.day.slice(0, 10) === h.time.slice(0, 10)) last.count += 1;
+    else out.push({ day: h.time, from: i, count: 1 });
+  });
+  return out;
+}
+
 function Weather({ w }: { w: Json }) {
   if (w.status !== "ok") {
     return <div className="card"><b>하루 날씨</b><p className="note" style={{ margin: "6px 0 0" }}>{w.message}</p></div>;
   }
+  const hours: Json[] = w.hours;
+  const first = hours[0]?.time, last = hours[hours.length - 1]?.time;
+  const span = first ? (first.slice(0, 10) === last?.slice(0, 10) ? dayLabel(first, true) : `${dayLabel(first, true)} ~ ${dayLabel(last, true)}`) : "";
   return (
     <div className="card">
-      <b>하루 날씨</b>
+      <div className="row"><b className="grow">하루 날씨</b>{span && <span className="note" style={{ margin: 0 }}>{span}</span>}</div>
       <p className="lead">{w.headline}</p>
       <div className="hours" role="list">
-        {w.hours.map((h: Json) => (
-          <div key={h.time} role="listitem" className={Number(h.precip_prob_pct) >= 60 ? "wet" : ""}>
+        {/* one bar per date, as wide as that date's hours */}
+        {days(hours).map((d) => (
+          <div key={d.day} className="daybar" aria-hidden="true" style={{ gridRow: 1, gridColumn: `${d.from + 1} / span ${d.count}` }}>
+            <span>{dayLabel(d.day)}</span>
+          </div>
+        ))}
+        {hours.map((h: Json, i: number) => (
+          <div key={h.time} role="listitem" aria-label={`${dayLabel(h.time, true)} ${h.time.slice(11, 16)}`}
+               className={`hour ${Number(h.precip_prob_pct) >= 60 ? "wet" : ""}`} style={{ gridRow: 2, gridColumn: i + 1 }}>
             <span>{h.time.slice(11, 16)}</span><b>{h.temp_c}°</b><span>{h.sky}</span><span>비 {h.precip_prob_pct}%</span><span>{h.wind_ms}m/s</span>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function NextStop({ s }: { s: Json }) {
-  if (s.status !== "ok") {
-    return <div className="card"><b>다음 경유지</b><p className="note" style={{ margin: "6px 0 0" }}>{s.message}</p></div>;
-  }
-  const n = s.next;
-  return (
-    <div className="card">
-      <b>{s.mode === "walking" ? "다음 경유지" : "첫 경유지"}</b>
-      <p className="lead" style={{ marginBottom: 0 }}>
-        {n.name}{n.distance_m != null && <span className="badge" style={{ marginLeft: 8 }}>앞 {dist(n.distance_m)}</span>}
-      </p>
     </div>
   );
 }
@@ -133,7 +147,7 @@ function Alerts({ items: all }: { items: Json[] }) {
   return (
     <>
       <h2 className="sec">최근 알림</h2>
-      {items.length === 0 && <p className="note">아직 알림이 없어요. 걷기를 시작하면 경유지 도착·일정·공지 알림이 여기에 모여요.</p>}
+      {items.length === 0 && <p className="note">아직 알림이 없어요. 걷기를 시작하면 일정·공지 알림이 여기에 모여요.</p>}
       {items.map((n) => (
         <div key={n.id} className="card alert">
           <div className={`ic ${n.severity === "safety" ? "safety" : ""}`}><svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{ __html: ALERT_ICON[alertIconFor(n.event_type)] }} /></div>
@@ -215,7 +229,6 @@ export default function Brief() {
           <Daylight d={data.daylight} />
           <Weather w={data.weather} />
           <Supplies s={data.supplies} />
-          <NextStop s={data.next_stop} />
           <Notices n={data.notices} />
         </>
       )}

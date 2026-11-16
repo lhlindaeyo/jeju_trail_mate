@@ -1,4 +1,4 @@
-"""앞길 브리핑: 지금 위치 기준으로 일몰 대비 도착, 앞쪽 보급 지점, 하루(24시간) 날씨, 다음 경유지, 공지를 계산한다.
+"""앞길 브리핑: 지금 위치 기준으로 일몰 대비 도착, 근처 화장실·앞쪽 보급 지점, 하루(24시간) 날씨, 공지를 계산한다.
 
 저장하는 것이 없다. 요청 때마다 진행 중인 세션(또는 오늘 코스), 일몰 계산, 적재된 공공 장소 데이터,
 기상청 단기예보에서 그 자리에서 만들어 돌려준다. 확인하지 못한 값은 만들어 내지 않고 'unavailable'과
@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from ..models import TrackingSession, TrailRoute, Trip, User
 from . import poi_service, route_service, schedule_service, weather_service
 from .geo import haversine_m, now_kst, project_on_path, sunset_kst
-from .tracking_service import next_waypoint, progress_summary, route_progress
+from .tracking_service import progress_summary, route_progress
 
 SUNSET_BUFFER_MIN = 30  # 해 지기 이만큼 전에는 걷기를 마치는 것을 권한다
 TIGHT_MARGIN_MIN = 30  # 도착 예상이 일몰보다 이만큼보다 덜 앞서면 '빠듯함'
 SUPPLY_GROUPS = [("toilet", "화장실"), ("food", "식사·카페"), ("rest", "쉬어갈 곳")]
 NEARBY_RADIUS_M = 2000  # 경로 좌표가 없는 코스: 내 주변 반경
+TOILET_RADIUS_M = 2000  # 화장실은 코스와 상관없이 내 위치 반경 2km
 AHEAD_WINDOW_M = 5000  # 경로 좌표가 있는 코스: 앞으로 이만큼까지
 OFF_PATH_MAX_M = 300  # 경로에서 이만큼 안쪽의 장소만 '길 위'로 본다
 BEHIND_TOLERANCE_M = 25  # 앞쪽 구간 매칭이 전체 경로 최선 매칭보다 이 이상 멀면 이미 지나온 곳
@@ -108,7 +109,10 @@ def _supplies(db: Session, route: TrailRoute | None, session: TrackingSession | 
     length = route.distance_km * 1000 if on_path and route.distance_km else None
     groups, sources, caveat = [], {}, None
     for cat, label in SUPPLY_GROUPS:
-        radius = AHEAD_WINDOW_M if on_path else NEARBY_RADIUS_M
+        # Toilets: whatever is within 2 km of where you are now, nearest first — one just behind you is still the
+        # closest toilet. Food and rest stops: ahead on the route when the course has a path.
+        around_me = cat == "toilet" or not on_path
+        radius = TOILET_RADIUS_M if cat == "toilet" else NEARBY_RADIUS_M if around_me else AHEAD_WINDOW_M
         res = poi_service.find_places_near(db, lat, lon, cat, radius, limit=40)
         caveat = caveat or res.get("caveat")
         places = []
@@ -123,19 +127,28 @@ def _supplies(db: Session, route: TrailRoute | None, session: TrackingSession | 
                 lat_p, lon_p = p["location"]
                 off, along = project_on_path(route.path, lat_p, lon_p, along_range=(max(done - 50, 0.0), length or float("inf")))
                 off_best, _ = project_on_path(route.path, lat_p, lon_p)
-                if off > OFF_PATH_MAX_M or off - off_best > BEHIND_TOLERANCE_M or along - done > AHEAD_WINDOW_M:
+                ahead = not (off > OFF_PATH_MAX_M or off - off_best > BEHIND_TOLERANCE_M or along - done > AHEAD_WINDOW_M)
+                if ahead:
+                    item["ahead_m"] = round(max(along - done, 0.0))
+                    item["off_path_m"] = round(off)
+                elif not around_me:
                     continue
-                item["ahead_m"] = round(max(along - done, 0.0))
-                item["off_path_m"] = round(off)
             places.append(item)
-        places.sort(key=lambda x: x["ahead_m"] if x["ahead_m"] is not None else x["distance_m"])
+        places.sort(key=lambda x: x["distance_m"] if around_me else x["ahead_m"])
         for s in res.get("sources", []):
             sources[s["name"]] = s
+        if places:
+            message = None
+        elif cat == "toilet" and res.get("status") == "ok":  # data is loaded, just nothing this close
+            message = f"반경 {TOILET_RADIUS_M // 1000}km 안에 확인된 화장실이 없어요."
+        else:
+            message = res.get("message") or f"확인된 {label}가 없어요."
         groups.append({"category": cat, "label": label, "places": places[:3],
-                       "message": None if places else (res.get("message") or f"확인된 {label}가 없어요.")})
+                       "scope": f"내 위치 반경 {radius // 1000}km" if around_me else f"앞으로 {AHEAD_WINDOW_M // 1000}km 이내",
+                       "message": message})
     return {"status": "ok", "basis": "along_route" if on_path else "nearby",
-            "scope": f"앞으로 {AHEAD_WINDOW_M // 1000}km 이내, 길에서 {OFF_PATH_MAX_M}m 안쪽" if on_path
-            else f"내 위치 반경 {NEARBY_RADIUS_M // 1000}km",
+            "scope": f"화장실은 내 위치 반경 {TOILET_RADIUS_M // 1000}km, 그 밖은 앞으로 {AHEAD_WINDOW_M // 1000}km 이내·길에서 {OFF_PATH_MAX_M}m 안쪽"
+            if on_path else f"내 위치 반경 {NEARBY_RADIUS_M // 1000}km",
             "groups": groups, "sources": list(sources.values()), "caveat": caveat,
             "note": None if on_path else "이 코스는 경로 좌표가 없어 앞쪽이 아니라 내 주변 기준으로 보여 드려요."}
 
@@ -166,22 +179,7 @@ def _weather(loc: dict | None, now: datetime) -> dict:
             "hours": hours, "source": w["source"], "source_url": w.get("source_url"), "base_time": w["base_time"]}
 
 
-# --- 4) 다음 경유지 · 5) 공지 -------------------------------------------------------------
-def _next_stop(route: TrailRoute | None, session: TrackingSession | None) -> dict:
-    if not route:
-        return {"status": "unavailable", "message": "코스를 고르면 다음 경유지를 알려 드려요."}
-    if session is not None:
-        nxt = next_waypoint(session)
-        if nxt is None:
-            return {"status": "unavailable", "message": "남은 경유지가 없거나 이 코스의 경유지 데이터가 없어요."}
-        return {"status": "ok", "mode": "walking", "next": nxt}
-    first = next((w for w in route.waypoints if w.kind != "S"), None)
-    if first is None:
-        return {"status": "unavailable", "message": "이 코스의 경유지 데이터가 아직 없어요."}
-    return {"status": "ok", "mode": "planned", "next": {"id": first.id, "code": first.code, "name": first.name, "distance_m": None,
-                                                         "location": [first.lat, first.lon] if first.lat is not None else None}}
-
-
+# --- 4) 공지 ------------------------------------------------------------------------------
 def _notices(db: Session, route: TrailRoute | None) -> dict:
     if not route:
         return {"status": "unavailable", "message": "코스를 고르면 우회·통제 공지를 확인해 드려요."}
@@ -209,7 +207,6 @@ def build_brief(db: Session, user: User, trip: Trip | None, session: TrackingSes
         "daylight": _daylight(route, session, sched, user, loc, now),
         "supplies": _supplies(db, route, session, loc),
         "weather": _weather(loc, now),
-        "next_stop": _next_stop(route, session),
         "notices": _notices(db, route),
         "note": "정보는 요청한 순간 계산한 값이에요. 장소 영업 여부는 실시간이 아니며 공식 공지는 별도로 확인하세요.",
     }

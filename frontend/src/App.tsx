@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, gpsQueue, isOnboarded, type Json } from "./api";
+import { showSystemNotification } from "./notify";
 import { sim, useSim } from "./sim";
 import Splash from "./screens/Splash";
 import Onboarding from "./screens/Onboarding";
@@ -137,9 +138,9 @@ export default function App() {
     if (!items?.length) return;
     setNotifications((all) => [...items.filter((n) => !all.some((x) => x.id === n.id)), ...all].slice(0, 50));
     setToasts((t) => [...items.filter((n) => !t.some((x) => x.id === n.id)), ...t].slice(0, 2));
-    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-      for (const n of items) new Notification(n.title, { body: n.message, tag: n.id });
-    }
+    // In the background, hand alerts to the service worker so they show on the banner / lock screen. (With Web Push
+    // the server sends the same alert too; the shared tag keeps it to one notification.)
+    if (document.hidden) for (const n of items) showSystemNotification(n);
   }, []);
 
   useEffect(() => {

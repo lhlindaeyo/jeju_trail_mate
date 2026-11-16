@@ -47,6 +47,24 @@
    "note": "공식 안내지도 이미지의 코스 선을 따라 그린 뒤(tools/olle_map_trace.py), 그 선에 가까운 실제 OSM 보행로를 이어 만든 추정 경로. 공식 거리 ±15% 안의 코스만 적재. 실제 리본·간세 표시를 우선."
   },
   {
+   "id": "public_toilet_std",
+   "name": "전국공중화장실표준데이터 (제주)",
+   "provider": "행정안전부 (공공데이터포털 15012892)",
+   "platform_url": "https://www.data.go.kr/data/15012892/standard.do",
+   "ref_date": null,
+   "license": "이용허락범위 제한 없음",
+   "note": "제주 주소·좌표만 적재. CSV를 data/raw/toilets/에 두거나, 표준데이터 API 활용신청 후 toilets-fetch."
+  },
+  {
+   "id": "osm_toilets",
+   "name": "OpenStreetMap 공중화장실 (제주)",
+   "provider": "© OpenStreetMap contributors",
+   "platform_url": "https://www.openstreetmap.org/copyright",
+   "ref_date": null,
+   "license": "ODbL 1.0 (출처 표시: © OpenStreetMap contributors)",
+   "note": "공식 표준데이터를 받기 전 임시 목록. 공식 데이터를 적재하면 대체됨."
+  },
+  {
    "id": "seogwipo_food",
    "name": "제주특별자치도 서귀포시_휴게음식점현황",
    "provider": "서귀포시 (공공데이터포털 15055973)",

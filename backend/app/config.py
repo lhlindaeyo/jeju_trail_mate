@@ -55,11 +55,18 @@ class Settings(BaseSettings):
     geocoder_chain: str = "local,stores,vworld,kakao"
     juso_entrc_dir: str = str(BACKEND_DIR.parent / "data" / "raw" / "juso_entrc")  # 위치정보 요약DB
     stores_dir: str = str(BACKEND_DIR.parent / "data" / "raw" / "stores")  # 상가정보·인허가 CSV/JSON (좌표 포함 업소 목록)
+    tour_api_dir: str = str(BACKEND_DIR.parent / "data" / "raw" / "tour_api")  # 한국관광공사 TourAPI 관광지 안내문
     sbiz_service_key: str | None = None  # 공공데이터포털 키 (소상공인 상가정보 API); 없으면 kma_service_key 사용
     vworld_api_key: str | None = None  # 브이월드 Geocoder/Search 2.0 인증키
     vworld_domain: str | None = None  # 키 발급 때 등록한 도메인
     kakao_rest_api_key: str | None = None  # 선택: 주소/장소명 → 좌표
     kakao_storable: bool = False  # 카카오 약관상 결과 저장이 허용됨을 확인한 경우에만 true
+
+    # Web Push (phone banner / lock-screen alerts while the app is closed). Needs `pip install pywebpush`
+    # and a key pair from `python -m app.push keygen`; without them alerts still show while the app is open.
+    vapid_public_key: str | None = None  # base64url, uncompressed P-256 point (goes to the browser)
+    vapid_private_key: str | None = None  # base64url raw private key — keep in .env only
+    vapid_subject: str = "mailto:push@example.invalid"  # push services want a contact; set your own in .env
 
     # Rules engine thresholds
     delay_threshold_ratio: float = 0.15

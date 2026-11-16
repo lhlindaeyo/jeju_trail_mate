@@ -21,7 +21,6 @@ class PreferencesIn(BaseModel):
     interests: list[str] | None = Field(default=None, max_length=20)
     notification_settings: dict | None = None
     consent_location: bool | None = None
-    consent_microphone: bool | None = None
     consent_ai_processing: bool | None = None
     consent_memory: bool | None = None
 
@@ -40,7 +39,7 @@ def prefs_to_dict(user: User) -> dict:
         "rest_every_minutes": p.rest_every_minutes, "interests": p.interests or [],
         "notification_settings": p.notification_settings or {},
         "consents": {
-            "location": p.consent_location, "microphone": p.consent_microphone,
+            "location": p.consent_location,
             "ai_processing": p.consent_ai_processing, "memory": p.consent_memory,
         },
     }

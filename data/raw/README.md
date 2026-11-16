@@ -10,6 +10,8 @@
 | `olle_osm/` | `overpass_olle_relations.json` — OpenStreetMap 제주올레 route relation (`olle-fetch`로 받음, ODbL) | 21개 relation 중 공식 거리 ±12%·시작·종점 500m 이내를 통과한 1·2·11·19·20코스만 적재 (2026-11-16) |
 | `olle_map_images/` | `map_<코스>.jpg` — 공식 코스 안내지도 이미지 (`olle-fetch`가 받음). 경로 위치 추정용으로만 쓰고 앱에서 보여 주지 않음 | 29장 (2026-11-16) |
 | `olle_traced/` | `traces.json`(안내지도에서 따라 그린 대략 선), `ways_<코스>.json`(그 주변 OSM 보행로), `overlays/`(검토용 이미지) | OSM 검증 경로가 없는 24개 코스 모두 적재 (예전 번호 15는 15-A 경로를 씀). 7-1·13·14·15-B·18은 지도가 단순화돼 공식 거리보다 15~27% 짧게, 8·12는 OSM에 없는 해안길이 많아 40%가량을 안내지도 선으로 그림 — 모두 지도 위에서 눈으로 확인 (2026-11-16) |
+| `tour_api/` | `kto_spots.json` — 한국관광공사 TourAPI 국문 관광정보(공공데이터포털 15101578)의 대표 관광지 18곳 공식 개요·좌표 (`python -m app.data_import tour-fetch`, 공공데이터포털 키 필요). 있으면 AI동행자의 관광지·이야기 답변이 이 글을 씀 | 18곳 모두 매칭 (2026-11-16). 오디(관광지 오디오 해설) API는 활용신청 전이라 미사용 |
+| `toilets/` | 제주 공중화장실 — `osm_toilets.json`(OpenStreetMap, ODbL) 또는 공식 `전국공중화장실표준데이터` CSV(행정안전부, 공공데이터포털 15012892)·API 결과. CSV > API > OSM 순으로 하나만 적재 (`python -m app.data_import toilets-fetch` / `toilets`) | OSM 594곳 적재 (2026-11-16). 공식 표준데이터 API는 활용신청 전이라 "등록되지 않은 서비스키" |
 | `poi/` | 공공와이파이 관광지 AP CSV, 서귀포시 착한가격업소 OpenAPI 활용가이드(HWP) | 있음 |
 | `juso_entrc/` | **도로명주소 위치정보 요약DB** 제주특별자치도 파일(.txt 또는 .zip) — 주소 → 좌표 변환용(공공누리 1유형, 출처표시) | 승인 대기. 받은 뒤 `python -m app.data_import juso-inspect`로 형식 확인 |
 

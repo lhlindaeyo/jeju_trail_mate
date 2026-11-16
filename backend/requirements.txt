@@ -7,6 +7,7 @@ httpx==0.28.1
 anthropic==2.5.0
 pyshp==3.1.6
 pyproj==3.8.0
+pywebpush==2.0.3  # phone banner / lock-screen alerts (Web Push); the app runs without it, alerts then only show in-app
 # optional
 # psycopg[binary]   # PostgreSQL
 

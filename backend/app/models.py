@@ -43,7 +43,7 @@ class UserPreferences(Base):
     notification_settings: Mapped[dict] = mapped_column(JSON, default=dict)
     # Separate, revocable consents (spec §13)
     consent_location: Mapped[bool] = mapped_column(Boolean, default=False)
-    consent_microphone: Mapped[bool] = mapped_column(Boolean, default=False)
+    consent_microphone: Mapped[bool] = mapped_column(Boolean, default=False)  # unused: voice questions were removed; kept so existing databases still insert
     consent_ai_processing: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_memory: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -290,6 +290,20 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     action_taken: Mapped[str | None] = mapped_column(String(30))  # opened | dismissed | snooze_today | <action id>
+
+
+class PushSubscription(Base):
+    """A browser's Web Push endpoint, so alerts reach the phone's banner and lock screen with the app closed."""
+
+    __tablename__ = "push_subscriptions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(String(1000), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failures: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class AgentProposal(Base):

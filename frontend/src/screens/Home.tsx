@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { api, gpsQueue } from "../api";
 import { useApp } from "../App";
@@ -27,6 +27,33 @@ function splitPath(path: [number, number][], doneM: number): [[number, number][]
     acc += seg;
   }
   return [path, []];
+}
+
+const ON_COURSE_M = 500; // farther than this from the course line, the live position says nothing about progress
+
+/** Cumulative metres along a path, cum[i] = distance from the start to path[i]. */
+function cumulative(path: [number, number][]): number[] {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + L.latLng(path[i - 1]).distanceTo(L.latLng(path[i])));
+  return cum;
+}
+
+/** Where on the path a position is: metres along and metres off. Only the stretch from `minAlong` on is
+ *  considered (keeps a walker from jumping back, and picks the start — not the finish — of a loop course). */
+function alongOnPath(path: [number, number][], cum: number[], p: [number, number], minAlong = 0) {
+  const kx = 111320 * Math.cos((p[0] * Math.PI) / 180), ky = 110540;
+  let best: { along: number; off: number } | null = null;
+  for (let i = 1; i < path.length; i++) {
+    if (cum[i] < minAlong) continue;
+    const ax = (path[i - 1][1] - p[1]) * kx, ay = (path[i - 1][0] - p[0]) * ky;
+    const bx = (path[i][1] - p[1]) * kx, by = (path[i][0] - p[0]) * ky;
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2)) : 0;
+    const off = Math.hypot(ax + dx * t, ay + dy * t);
+    const along = Math.max(minAlong, cum[i - 1] + t * (cum[i] - cum[i - 1]));
+    if (!best || off < best.off - 1) best = { along, off }; // ties keep the earlier stretch
+  }
+  return best;
 }
 
 /** Demo mode ("가상 위치") controls: walk the course, fast-forward, step off the route. */
@@ -70,8 +97,21 @@ export default function Home() {
   const active = session && session.status !== "ended" && session.route_id === course?.id;
   const doneM = active && session.done_km != null ? session.done_km * 1000 : 0;
   const totalM = course?.distance_km != null ? course.distance_km * 1000 : null;
-  const leftM = totalM != null ? Math.max(totalM - doneM, 0) : null;
-  const nextWp = active ? session.next_waypoint : null;
+
+  // Live progress from the current position on the course line, recomputed on every position update instead of
+  // waiting for the recorded track to reach the server. The line is often shorter or longer than the official
+  // distance, so the share walked along the line is applied to the official distance.
+  const path: [number, number][] = course?.path ?? [];
+  const cum = useMemo(() => (path.length > 1 ? cumulative(path) : []), [course?.id, path.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const live = useMemo(() => {
+    if (!pos?.onIsland || cum.length < 2 || totalM == null) return null;
+    const lineM = cum[cum.length - 1];
+    const fromM = active ? Math.max(doneM - 200, 0) : 0; // the recorded progress is metres along this same line
+    const hit = alongOnPath(path, cum, [pos.lat, pos.lon], fromM);
+    return hit && hit.off <= ON_COURSE_M ? (hit.along / lineM) * totalM : null;
+  }, [pos?.lat, pos?.lon, pos?.onIsland, cum, totalM, active, doneM]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownDoneM = live ?? doneM;
+  const leftM = totalM != null ? Math.max(totalM - shownDoneM, 0) : null;
 
   // ---- maps ---------------------------------------------------------------------------
   useEffect(() => {
@@ -169,7 +209,6 @@ export default function Home() {
   const region = !course ? "코스탐색에서 걸을 길을 골라 주세요"
     : isHy ? "서귀포시 · 서귀포시청 순환"
     : course.start_point && course.end_point ? `${course.start_point} → ${course.end_point}` : course.name;
-  const visitedCount = active ? session.visited_waypoints.filter((n: string) => n !== "서귀포시청제1청사").length : 0;
 
   return (
     <section aria-label="홈">
@@ -190,17 +229,12 @@ export default function Home() {
       {simOn && <SimPanel />}
 
       <div className="stat">
-        <div className="n">{nextWp?.distance_m != null ? (nextWp.distance_m / 1000).toFixed(1) : "—"}<small>km</small></div>
-        <div className="l">{nextWp ? `다음 포인트 · ${nextWp.name}` : "다음 포인트까지"}</div>
         <div className="n">{fmtKm(leftM)}<small>km</small></div>
         <div className="l">목적지까지</div>
         <button className={`refresh ${spin ? "spin" : ""}`} type="button" onClick={refresh}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>새로고침
         </button>
       </div>
-
-      <div className="chip2"><div className="n">{course?.course_no ?? "—"}</div><div className="l">코스</div>
-        <div className="n">{course?.waypoints?.length ? visitedCount : "—"}</div><div className="l">포인트</div></div>
 
       <div className="ctrl">
         {!active && <button className="primary" onClick={start} disabled={busy}>걷기 시작</button>}
@@ -217,7 +251,7 @@ export default function Home() {
           <span>{active ? (session.tracking_mode === "manual" ? "수동 기록 중" : `기록 중 · GPS ${session.gps_quality === "poor" ? "약함" : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : "확인 중"}`)
             : totalM != null ? `전체 ${course!.distance_km.toFixed(1)} km` : course ? "거리 계산 예정" : "—"}</span>
         </div>
-        <div className="kv"><b>{active ? fmtKm(doneM) : "0.0"}</b><span>진행 km</span></div>
+        <div className="kv"><b>{active ? fmtKm(shownDoneM) : "0.0"}</b><span>진행 km</span></div>
         <div className="kv"><b>{fmtKm(leftM)}</b><span>남은 km</span></div>
       </div>
     </section>

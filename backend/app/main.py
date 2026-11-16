@@ -23,11 +23,26 @@ def _drop_removed_photo_consent() -> None:
             conn.execute(text("ALTER TABLE user_preferences DROP COLUMN consent_photos"))
 
 
+def _drop_removed_feature_alerts() -> None:
+    """Alerts saved by the removed diary feature: '오늘의 기록' prompts and waypoint alerts whose button was
+    '사진 남기기' (open_journal). Their buttons lead nowhere, so they are deleted."""
+    from .models import Notification
+    from .rules.engine import EVENT_TYPES, REMOVED_ACTIONS
+
+    with SessionLocal() as db:
+        stale = [n for n in db.query(Notification).all()
+                 if n.event_type not in EVENT_TYPES or any(a.get("id") in REMOVED_ACTIONS for a in (n.actions or []))]
+        for n in stale:
+            db.delete(n)
+        db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Dev convenience: create tables & load the seed course set. Use Alembic migrations in production.
     Base.metadata.create_all(engine)
     _drop_removed_photo_consent()
+    _drop_removed_feature_alerts()
     with SessionLocal() as db:
         seed_routes(db)
         seed_tour_source(db)

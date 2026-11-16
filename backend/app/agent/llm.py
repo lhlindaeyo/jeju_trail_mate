@@ -229,10 +229,13 @@ def _summarize(tool: str, out: Any) -> str:
             for p in out["places"]:
                 dist = f" ({p['distance_m']}m)" if p.get("distance_m") is not None else ""
                 lines.append(f"- {p['name']}{dist} · {p['summary']}")
-            return head + "\n".join(lines) + f"\n{out['caveat']} 출처: {out['source']}"
+            return head + "\n".join(lines) + f"\n{out['caveat']}"  # the source goes under the answer, not in it
         if tool == "get_tour_story" and out.get("stories"):
-            body = "\n\n".join(f"[{s['name']}]\n{s['story']}" for s in out["stories"])
-            return f"{body}\n\n{out['caveat']} 출처: {out['source']}"
+            def head(s):
+                return f"[{s['name']} · {s['distance_m']}m]" if s.get("distance_m") is not None else f"[{s['name']}]"
+
+            body = "\n\n".join(f"{head(s)}\n{s['story']}" for s in out["stories"])
+            return f"{body}\n\n{out['caveat']}"
         if tool == "get_tour_story" and out.get("status") == "not_found":
             return f"{out['message']} 정리된 곳: {', '.join(out['available'])}"
         if tool == "get_next_waypoint" and out.get("next"):

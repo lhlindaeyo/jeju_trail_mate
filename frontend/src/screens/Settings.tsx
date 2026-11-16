@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
+import { disableNotifications, enableNotifications, notifyState, sendTestNotification, type NotifyState } from "../notify";
 
 const NOTIFY_TYPES: [string, string, string][] = [
   ["route_notice", "공식 우회·통제 공지 (안전)", "공식 우회·통제 소식이 있을 때 알려줘요."],
@@ -10,6 +11,45 @@ const NOTIFY_TYPES: [string, string, string][] = [
   ["weather", "비 예보", "비가 올 것 같으면 알려줘요."],
   ["notice_unverified", "공지 최신 확인 필요", "공지를 최신으로 확인하지 못했을 때 알려줘요."],
 ];
+
+const NOTIFY_LABEL: Record<NotifyState, string> = {
+  on: "켜짐 · 앱을 닫아도 잠금화면·상단 배너로 알려 드려요",
+  on_in_app_only: "켜짐 · 앱이 열려 있거나 백그라운드에 있을 때 알려 드려요",
+  off: "꺼짐",
+  blocked: "차단됨 · 휴대폰 설정 → 브라우저(또는 앱) → 알림에서 허용해 주세요",
+  ios_needs_home_screen: "아이폰은 Safari 공유 → '홈 화면에 추가'로 설치한 뒤 그 앱에서 켤 수 있어요",
+  unsupported: "이 브라우저는 알림을 지원하지 않아요",
+};
+
+/** Phone banner / lock-screen alerts. Permission is requested only when this button is tapped. */
+function PhoneNotifications() {
+  const [state, setState] = useState<NotifyState | null>(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { notifyState().then(setState); }, []);
+  const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } finally { setBusy(false); } };
+  const on = state === "on" || state === "on_in_app_only";
+  return (
+    <div className="card">
+      <h2>폰 알림</h2>
+      <p className="muted small" style={{ margin: "0 0 8px" }}>안전·일정 알림을 휴대폰 잠금화면과 상단 배너로 받아요.</p>
+      <p style={{ margin: "0 0 10px" }}><strong>{state ? NOTIFY_LABEL[state] : "확인 중…"}</strong></p>
+      <div className="row wrap">
+        {(state === "off" || state === "on_in_app_only") && (
+          <button className="btn sm" disabled={busy} onClick={() => run(async () => { const r = await enableNotifications(); setState(r.state); setMsg(r.message); })}>
+            {state === "off" ? "폰 알림 켜기" : "앱 닫혀도 받기"}</button>
+        )}
+        {on && <button className="btn sm ghost" disabled={busy} onClick={() => run(async () => setMsg(await sendTestNotification()))}>테스트 알림</button>}
+        {state === "on" && (
+          <button className="btn sm ghost" disabled={busy} onClick={() => run(async () => { await disableNotifications(); setState(await notifyState()); setMsg("앱이 닫혀 있을 때의 알림을 껐어요."); })}>
+            닫혀 있을 때 끄기</button>
+        )}
+      </div>
+      {msg && <p className="muted small" style={{ margin: "8px 0 0" }}>{msg}</p>}
+      <p className="muted small" style={{ margin: "8px 0 0" }}>잠금화면에 보이는지는 휴대폰의 알림 설정(잠금화면 표시)도 따라요.</p>
+    </div>
+  );
+}
 
 export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () => void | Promise<void>; submitLabel?: string }) {
   const [p, setP] = useState<Json | null>(null);
@@ -34,7 +74,7 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
           walk_start_time: p.walk_start_time, walk_end_time: p.walk_end_time, rest_every_minutes: Number(p.rest_every_minutes),
           notification_settings: p.notification_settings,
           consent_ai_processing: p.consents.ai_processing,
-          consent_location: p.consents.location, consent_microphone: p.consents.microphone,
+          consent_location: p.consents.location,
         },
       });
       setMsg("저장했어요.");
@@ -61,9 +101,9 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
           <span><strong>AI 처리</strong><br /><span className="muted small">질문과 현재 코스 상황을 외부 AI(Anthropic Claude)로 보내 답변을 만듭니다. 원시 GPS 기록은 보내지 않습니다.</span></span></label>
         <label className="toggle"><input type="checkbox" checked={p.consents.location} onChange={(e) => setConsent("location", e.target.checked)} />
           <span><strong>위치 기록</strong><br /><span className="muted small">트레킹 세션을 시작했을 때만 위치를 기록합니다. 원시 위치는 세션 종료 30일 후 삭제됩니다.</span></span></label>
-        <label className="toggle"><input type="checkbox" checked={p.consents.microphone} onChange={(e) => setConsent("microphone", e.target.checked)} />
-          <span><strong>음성 질문</strong><br /><span className="muted small">AI 동행자에게 말로 질문합니다. 브라우저 음성 인식은 기기 제조사(구글·애플) 서버에서 처리될 수 있습니다.</span></span></label>
       </div>
+
+      <PhoneNotifications />
 
       <div className="card">
         <h2>알림</h2>

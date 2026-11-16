@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, fmtDate, type Json } from "../api";
 import { useApp } from "../App";
-import { listen, voiceSupported } from "../voice";
 
 type Msg = { role: "me" | "ai"; text: string; meta?: Json; at?: string };
 const EXAMPLES = ["근처 맛집 알려줘", "근처 관광지 알려줘", "관광지와 관련된 이야기 알려줘"];
@@ -17,14 +16,12 @@ function Avatar() {
 }
 
 export default function Companion() {
-  const { trip, session, me, openSheet, toast } = useApp();
+  const { trip, session, me, openSheet, pos } = useApp();
   const [msgs, setMsgs] = useState<Msg[]>(() => {
     try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
   });
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
-  const stopRef = useRef<() => void>(() => undefined);
   const endRef = useRef<HTMLDivElement>(null);
   const [heroOut, setHeroOut] = useState(false); // big character shrinking away right after the first question
   const chatting = msgs.length > 0 && !heroOut;
@@ -43,7 +40,9 @@ export default function Companion() {
     setBusy(true);
     try {
       const r = await api("/v1/agent/chat", { body: { message: q, trip_id: trip?.id ?? null,
-        session_id: session && session.status !== "ended" ? session.session_id : null, history } });
+        session_id: session && session.status !== "ended" ? session.session_id : null, history,
+        // current position for '여기 이야기' and similar; the server uses it only with location consent
+        location: pos && pos.onIsland ? { lat: pos.lat, lon: pos.lon, accuracy_m: pos.acc } : null } });
       setMsgs((m) => [...m, { role: "ai", text: r.reply, meta: r, at: now() }]);
     } catch (e) { setMsgs((m) => [...m, { role: "ai", text: (e as Error).message, at: now() }]); } finally { setBusy(false); }
   };
@@ -53,14 +52,6 @@ export default function Companion() {
       await api(`/v1/trips/${trip!.id}/proposals/${pid}/decision`, { body: { approve } });
       setMsgs((m) => [...m, { role: "ai", text: approve ? "일정에 반영했어요. 메뉴 → 여행 일정에서 확인할 수 있어요." : "제안을 거절했어요. 일정은 그대로예요.", at: now() }]);
     } catch (e) { setMsgs((m) => [...m, { role: "ai", text: (e as Error).message, at: now() }]); }
-  };
-
-  const voice = () => {
-    if (listening) { stopRef.current(); return; }
-    if (!voiceSupported()) { toast("이 브라우저는 음성 입력을 지원하지 않아요"); return; }
-    if (!me.consents.microphone) { openSheet("settings"); return; }
-    setListening(true);
-    stopRef.current = listen((t, final) => { setText(t); if (final) send(t); }, (err) => { setListening(false); if (err) toast(err); });
   };
 
   const newChat = () => { setMsgs([]); setText(""); };
@@ -132,12 +123,7 @@ export default function Companion() {
           </div>
         )}
         <form className="composer" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-          <input type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "듣고 있어요…" : "무엇이든 물어보세요"} aria-label="질문 입력" />
-          <button type="button" className={`ic-btn ${listening ? "rec" : ""}`} onClick={voice} aria-label={listening ? "음성 입력 멈추기" : "음성으로 질문"} aria-pressed={listening}>
-            {listening
-              ? <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
-              : <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>}
-          </button>
+          <input type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="무엇이든 물어보세요" aria-label="질문 입력" />
           <button type="submit" className="ic-btn send" disabled={busy || !text.trim()} aria-label="보내기">
             <svg viewBox="0 0 24 24"><path d="M4 12 20 4l-4 16-4.5-6.5z" /><path d="M11.5 13.5 20 4" /></svg>
           </button>

@@ -37,6 +37,7 @@ def build_context(ctx: ToolContext) -> dict:
             **({"interests": p.interests} if p.consent_memory else {}),
         },
         "location_sharing": bool(p.consent_location),
+        "current_location_known": ctx._location() is not None,  # the position itself stays out of the prompt
     }
     if ctx.trip:
         out["trip"] = {"title": ctx.trip.title, "start": ctx.trip.start_date.isoformat(), "end": ctx.trip.end_date.isoformat()}
@@ -72,7 +73,7 @@ def _sources(calls) -> list[dict]:
 
 
 def chat(db: Session, user: User, message: str, trip: Trip | None, session: TrackingSession | None,
-         history: list[dict] | None = None) -> dict:
+         history: list[dict] | None = None, location: tuple[float, float] | None = None) -> dict:
     if EMERGENCY.search(message):
         return {"reply": EMERGENCY_REPLY, "intent": "emergency", "tool_calls": [], "proposals": [], "sources": [], "provider": "policy"}
 
@@ -81,7 +82,7 @@ def chat(db: Session, user: User, message: str, trip: Trip | None, session: Trac
         return {"reply": "AI 대화를 사용하려면 설정에서 'AI 처리 동의'를 켜 주세요. 동의 전에는 대화 내용이 외부 AI로 전송되지 않습니다.",
                 "intent": "consent_required", "tool_calls": [], "proposals": [], "sources": [], "provider": "policy"}
 
-    ctx = ToolContext(db=db, user=user, trip=trip, session=session)
+    ctx = ToolContext(db=db, user=user, trip=trip, session=session, client_location=location)
     turns = (history or [])[-MAX_HISTORY_TURNS:]
     transcript = "\n".join(f"{'사용자' if t.get('role') == 'user' else '동행자'}: {str(t.get('text', ''))[:500]}" for t in turns)
     user_turn = (

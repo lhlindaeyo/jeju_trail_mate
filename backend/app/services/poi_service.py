@@ -58,8 +58,10 @@ def find_places_near(db: Session, lat: float, lon: float, category: str = "food"
     near = [(p, haversine_m(lat, lon, p.lat, p.lon)) for p in rows if not _closed(p.open_status)
             and not (category == "rest" and p.detail and any(w in p.detail for w in NOT_REST))]
     near = sorted([x for x in near if x[1] <= radius_m], key=lambda x: x[1])
-    seen_names: set[str] = set()
-    near = [x for x in near if not (x[0].name in seen_names or seen_names.add(x[0].name))][:limit]  # one entry per place name
+    # one entry per place: the same name within ~100 m is one place listed by two sources; generic names like
+    # '공중화장실' further apart are different places
+    seen: set[tuple] = set()
+    near = [x for x in near if not ((k := (x[0].name, round(x[0].lat, 3), round(x[0].lon, 3))) in seen or seen.add(k))][:limit]
     base = {"category": category, "category_label": CATEGORY_LABEL.get(category, category), "radius_m": radius_m,
             "caveat": "영업 여부·시간은 실시간 정보가 아닙니다. 방문 전 전화나 지도 앱으로 확인하세요."}
     if near:

@@ -53,11 +53,13 @@ TOOLS: list[ToolSpec] = [
         },
         "required": ["category"],
     }),
-    ToolSpec("find_tour_spots", "앱에 정리해 둔 대표 관광지 목록을 찾는다. 위치를 알면 가까운 순, 모르면 서귀포 대표 장소부터. "
-             "'근처 관광지', '가볼 만한 곳' 같은 질문에 쓴다. 위치는 대략적이며 출처(자체 정리)를 함께 돌려준다.", {
+    ToolSpec("find_tour_spots", "대표 관광지 목록을 찾는다. 위치를 알면 가까운 순, 모르면 서귀포 대표 장소부터. "
+             "'근처 관광지', '가볼 만한 곳' 같은 질문에 쓴다. 출처(한국관광공사 공식 안내 또는 자체 정리)를 함께 돌려준다.", {
         "type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 10}},
     }),
-    ToolSpec("get_tour_story", "관광지에 얽힌 이야기(설화·유래)를 조회한다. spot에 관광지 이름을 넣고, 생략하면 가까운(또는 대표) 관광지 몇 곳의 이야기를 돌려준다. "
+    ToolSpec("get_tour_story", "관광지 안내와 얽힌 이야기(설화·유래)를 조회한다. 한국관광공사 공식 안내문이 있으면 그 글을 돌려준다. "
+             "spot에 관광지 이름을 넣는다. '여기', '근처', '지금 있는 곳' 이야기처럼 장소 이름이 없으면 spot을 생략한다 — "
+             "현재 위치를 알면 가까운 관광지·문화시설의 공식 안내문을 거리와 함께 돌려주고, 모르면 대표 관광지 이야기를 돌려준다. "
              "이야기는 도구가 돌려준 문장만 쓰고 지어내지 않는다.", {
         "type": "object", "properties": {"spot": {"type": "string", "description": "예: '정방폭포', '외돌개'"}},
     }),
@@ -99,6 +101,7 @@ class ToolContext:
     user: User
     trip: Trip | None
     session: TrackingSession | None
+    client_location: tuple[float, float] | None = None  # the phone's current position sent with this chat turn
 
     @property
     def prefs(self):
@@ -110,9 +113,11 @@ class ToolContext:
         return schedule_service.approved_for(self.db, self.trip, now_kst().date())
 
     def _location(self) -> tuple[float, float] | None:
-        if self.session and self.session.last_lat is not None and self.prefs.consent_location:
+        if not self.prefs.consent_location:
+            return None
+        if self.session and self.session.status != "ended" and self.session.last_lat is not None:
             return self.session.last_lat, self.session.last_lon
-        return None
+        return self.client_location
 
     def _default_route(self):
         if self.session and self.session.route:

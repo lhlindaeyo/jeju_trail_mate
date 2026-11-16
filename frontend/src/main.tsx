@@ -10,6 +10,8 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+// Registered in development too: phone notifications (banner / lock screen) go through the service worker.
+// It never caches the dev server's own modules.
+if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
 }

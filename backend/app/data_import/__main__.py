@@ -7,6 +7,9 @@
     python -m app.data_import olle-osm [../data/raw/olle_osm]        # OSM 경로선 적재 (공식 거리·시종점으로 검증한 코스만)
     python tools/olle_map_trace.py                                   # 공식 안내지도 이미지 → 대략 선 (Pillow·NumPy 필요)
     python -m app.data_import olle-traced [../data/raw/olle_traced] [--courses 3-A,4]   # 그 선을 따라 실제 보행로 위 경로 적재
+    python -m app.data_import tour-fetch                             # 한국관광공사 TourAPI 관광지 공식 안내문 → data/raw/tour_api
+    python -m app.data_import toilets-fetch                          # 제주 공중화장실: 표준데이터 API(활용신청 시) + OSM → data/raw/toilets, 적재
+    python -m app.data_import toilets [../data/raw/toilets]          # 폴더의 표준데이터 CSV > API 결과 > OSM 순으로 하나 적재
     python -m app.data_import hayoung      ../data/raw/hayoung_olle [--inspect]
     python -m app.data_import poi          ../data/raw/poi           # CSV files in the folder
     python -m app.data_import goodprice                              # 서귀포시 착한가격업소 OpenAPI (no key)
@@ -28,7 +31,8 @@ from ..config import get_settings
 from ..db import Base, SessionLocal, engine
 from ..services.route_service import seed_routes
 from ..services.tour_service import seed_tour_source
-from . import hayoung_shp, locate_waypoints, olle_csv, olle_official, olle_osm, olle_traced, poi_csv, poi_sources
+from . import (hayoung_shp, locate_waypoints, olle_csv, olle_official, olle_osm, olle_traced, poi_csv, poi_sources, toilets,
+               tour_api)
 from .common import ImportError_
 
 
@@ -87,8 +91,9 @@ def _geocode_tools(a) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.data_import")
-    ap.add_argument("kind", choices=["olle", "olle-fetch", "olle-endpoints", "olle-osm", "olle-traced", "hayoung", "poi",
-                                     "goodprice", "locate-waypoints", "all", "juso-inspect", "geocode", "sbiz-fetch"])
+    ap.add_argument("kind", choices=["olle", "olle-fetch", "olle-endpoints", "olle-osm", "olle-traced", "tour-fetch", "toilets-fetch",
+                                     "toilets", "hayoung", "poi", "goodprice", "locate-waypoints", "all", "juso-inspect", "geocode",
+                                     "sbiz-fetch"])
     ap.add_argument("--courses", help="olle-traced: 이 코스만 (예: 3-A,4)")
     ap.add_argument("folder", type=Path, nargs="?")
     ap.add_argument("--address", help="geocode: 주소 또는 장소명")
@@ -134,7 +139,7 @@ def main(argv=None) -> int:
         if a.kind == "all":
             root = a.folder or raw
             for sub, kind in (("olle_course_status", "olle"), ("olle_official", "olle-endpoints"), ("olle_osm", "olle-osm"),
-                              ("olle_traced", "olle-traced"), ("hayoung_olle", "hayoung"), ("poi", "poi")):
+                              ("olle_traced", "olle-traced"), ("hayoung_olle", "hayoung"), ("poi", "poi"), ("toilets", "toilets")):
                 d = root / sub
                 if d.exists() and any(p.suffix in (".csv", ".shp", ".json") for p in d.iterdir()):
                     jobs.append((kind, d))
@@ -144,7 +149,8 @@ def main(argv=None) -> int:
             if a.kind in ("olle", "hayoung", "poi") and not a.folder:
                 ap.error("folder is required")
             default = {"olle-endpoints": raw / "olle_official", "olle-osm": raw / "olle_osm",
-                       "olle-traced": raw / "olle_traced"}.get(a.kind)
+                       "olle-traced": raw / "olle_traced", "tour-fetch": Path(get_settings().tour_api_dir),
+                       "toilets": raw / "toilets", "toilets-fetch": raw / "toilets"}.get(a.kind)
             jobs.append((a.kind, a.folder or default))
         results = {}
         for kind, folder in jobs:
@@ -155,6 +161,15 @@ def main(argv=None) -> int:
                     results[kind] = olle_official.run(db, folder, license=a.license, dry_run=a.dry_run)
                 elif kind == "olle-osm":
                     results[kind] = olle_osm.run(db, folder, license=a.license, dry_run=a.dry_run)
+                elif kind == "tour-fetch":
+                    s = get_settings()
+                    results[kind] = tour_api.run(db, folder, s.sbiz_service_key or s.kma_service_key,
+                                                 license=a.license, dry_run=a.dry_run)
+                elif kind in ("toilets-fetch", "toilets"):
+                    if kind == "toilets-fetch":
+                        s = get_settings()
+                        results["toilets-fetch"] = toilets.fetch(folder, s.sbiz_service_key or s.kma_service_key)
+                    results["toilets"] = toilets.run(db, folder, license=a.license, dry_run=a.dry_run)
                 elif kind == "olle-traced":
                     only = {c.strip() for c in a.courses.split(",")} if a.courses else None
                     results[kind] = olle_traced.run(db, folder, license=a.license, dry_run=a.dry_run, only=only)

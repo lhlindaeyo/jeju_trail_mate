@@ -43,6 +43,7 @@ ACT_LATER = {"id": "later", "label": "나중에"}
 ACT_SNOOZE = {"id": "snooze_today", "label": "오늘은 그만"}
 ACT_NOTICE = {"id": "open_notice", "label": "공지 원문 열기"}
 ACT_BRIEF = {"id": "open_brief", "label": "앞길 보기"}
+REMOVED_ACTIONS = {"open_journal"}  # buttons of removed features (diary/photos); alerts carrying them are dropped
 
 
 def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | None = None, *, weather: dict | None = None) -> list[Event]:
@@ -187,6 +188,9 @@ def deliver(db: Session, session: TrackingSession, user: User, events: list[Even
         db.add(n)
         out.append(n)
     db.commit()
+    from ..push import deliver_async
+
+    deliver_async(out)  # phone banner / lock screen via Web Push, when set up
     return out
 
 
