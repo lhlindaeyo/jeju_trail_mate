@@ -35,13 +35,17 @@ SIGMA_M = 40.0
 SKETCH_COST = 6.0  # real ways up to ≈ 90 m off the sketch are preferred over walking the sketch itself
 SKETCH_STEP_M = 25.0
 LINK_M = 50.0
-SKETCH_SHARE_MAX = 0.35  # more than this off mapped paths → too little real geometry to trust
+SKETCH_SHARE_MAX = 0.45  # more than this off mapped paths → too little real geometry to trust
 GRID_M = 60.0
 ICP_REACH_M = 150.0
 ALIGN_WINDOW_M = 1200.0
 ANCHOR_W = 20.0
 PAD_DEG = 0.004  # ≈ 400 m around the sketch for the way download
-LENGTH_TOL = 0.15  # maps are simplified; trails missing from OSM force small road detours
+# Course maps smooth out zigzag forest and coastal trails, so a faithful trace comes out shorter than the
+# official distance (up to ~27 % on 13코스, checked on the map); longer than official means a detour.
+LENGTH_MIN_RATIO, LENGTH_MAX_RATIO = 0.70, 1.15
+# Old course numbers still referenced by saved trips: they follow the course that replaced them.
+COURSE_ALIASES = {"15": "15-A"}
 MEAN_OFF_MAX_M = 110.0  # the sketch itself is 50–150 m off in places (simplified maps)
 WAY_QUERY = ('[out:json][timeout:120];way["highway"]["highway"!~"^(motorway|motorway_link|trunk_link|construction|proposed|'
              'abandoned|bus_guideway|raceway)$"]["access"!~"^(private|no)$"]["foot"!="no"]({s},{w},{n},{e});out geom;')
@@ -356,8 +360,10 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
             start, end = [route.start_lat, route.start_lon], [route.end_lat, route.end_lon]
             aligned = align_sketch(t["trace"], way_list, [start, end])
             info["align_shift_m"] = round(sum(haversine_m(*a, *b) for a, b in zip(t["trace"], aligned)) / len(aligned))
-            # via points ride along with the sketch point they sit on
-            via = [aligned[min(range(len(t["trace"])), key=lambda i: haversine_m(*t["trace"][i], *v))] for v in t.get("via", [])]
+            # via points ride along with the sketch point they sit on, unless pinned to a named place
+            pinned = t.get("via_pinned") or [False] * len(t.get("via", []))
+            via = [v if pin else aligned[min(range(len(t["trace"])), key=lambda i: haversine_m(*t["trace"][i], *v))]
+                   for v, pin in zip(t.get("via", []), pinned)]
             try:
                 path = corridor_route(way_list, aligned, [start, *via, end], stats)
                 info.update(stats)
@@ -372,7 +378,7 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
                          "start_off_m": round(haversine_m(*path[0], route.start_lat, route.start_lon)),
                          "end_off_m": round(haversine_m(*path[-1], route.end_lat, route.end_lon))})
             problems = []
-            if route.distance_km and abs(length / 1000 - route.distance_km) / route.distance_km > LENGTH_TOL:
+            if route.distance_km and not LENGTH_MIN_RATIO <= length / 1000 / route.distance_km <= LENGTH_MAX_RATIO:
                 problems.append(f"길이 {length / 1000:.2f}km ≠ 공식 {route.distance_km}km")
             if info["mean_off_sketch_m"] > MEAN_OFF_MAX_M:
                 problems.append(f"안내지도 선과 평균 {info['mean_off_sketch_m']}m 떨어져 있습니다")
@@ -393,6 +399,16 @@ def run(db: Session, folder: Path, *, license: str | None = None, dry_run: bool 
     finally:
         if client is None:
             c.close()
+    for old, new in COURSE_ALIASES.items():
+        src, dst = routes.get(new), routes.get(old)
+        if not (src and dst and new in report["loaded"]) or (only and new not in only):
+            continue
+        report["loaded"][old] = {"same_as": new}
+        if not dry_run:
+            dst.path, dst.has_geometry = src.path, True
+            dst.start_lat, dst.start_lon, dst.end_lat, dst.end_lon = src.start_lat, src.start_lon, src.end_lat, src.end_lon
+            dst.segments = [RouteSegment(seq=0, coords=src.path, length_m=path_length_m(src.path), source_id=SOURCE_ID)]
+            dst.version = (dst.version or 1) + 1
     report["loaded_count"], report["rejected_count"] = len(report["loaded"]), len(report["rejected"])
     if not dry_run and report["loaded"]:
         register(db, SOURCE_ID, [f], license=license, ref_date=(data.get("generated_at") or "")[:10] or None)

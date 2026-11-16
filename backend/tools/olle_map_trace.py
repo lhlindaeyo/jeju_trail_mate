@@ -141,7 +141,9 @@ def trace_course(no: str, cfg: dict, palette: dict, endpoints: dict, cache: dict
         return {"error": "공식 시작·종점 좌표 없음"}
     im = np.asarray(Image.open(img).convert("RGB")).astype(int)
     cost = cost_grid(mask_for(im, [palette[c] for c in cfg["colors"]]))
-    stops = [tuple(cfg["start_px"])] + [tuple(v) for v in cfg.get("via_px", [])] + [tuple(cfg["end_px"])]
+    # via_px entries are [x, y], or {"px": [x, y], "name": [...]} to pin that via to the named place's real position
+    via_cfg = [v if isinstance(v, dict) else {"px": v} for v in cfg.get("via_px", [])]
+    stops = [tuple(cfg["start_px"])] + [tuple(v["px"]) for v in via_cfg] + [tuple(cfg["end_px"])]
     px: list[tuple[int, int]] = []
     for a, b in zip(stops, stops[1:]):
         seg = pixel_path(cost, a, b)
@@ -174,13 +176,16 @@ def trace_course(no: str, cfg: dict, palette: dict, endpoints: dict, cache: dict
     trace = to_ll(px[::2] + [px[-1]])
     # A via point that is also a kept map label goes to the label's real coordinate; others are transformed.
     kept = {tuple(p): ll for p, ll in ctrl}
-    via = [kept.get(tuple(v)) or to_ll([v])[0] for v in cfg.get("via_px", [])]
+    named = [v.get("name") and nominatim(v["name"], bbox, cache) for v in via_cfg]
+    via = [n or kept.get(tuple(v["px"])) or to_ll([v["px"]])[0] for n, v in zip(named, via_cfg)]
+    via_pinned = [bool(n) for n in named]  # pinned vias are real positions; the others move with the sketch
     ov = np.asarray(Image.open(img).convert("RGB")).copy()
     for x, y in px:
         ov[max(0, y - 1):y + 2, max(0, x - 1):x + 2] = [230, 20, 20]
     (OUT / "overlays").mkdir(parents=True, exist_ok=True)
     Image.fromarray(ov).save(OUT / "overlays" / f"trace_{cfg['image']}_{no}.png")
     return {"trace": [[round(a, 6), round(b, 6)] for a, b in trace], "via": [[round(a, 6), round(b, 6)] for a, b in via],
+            "via_pinned": via_pinned,
             "image": img.name, "pixels": len(px), "off_line_pixels": off_line,
             "metres_per_px": round(float(np.hypot(*A[0])), 2), "controls_used": len(ctrl),
             "control_residuals_m": [round(float(r)) for r in res], "dropped_labels": dropped,
