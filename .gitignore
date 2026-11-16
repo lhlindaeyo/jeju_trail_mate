@@ -27,3 +27,13 @@ Thumbs.db
 # Raw downloaded datasets (license-dependent) — keep out of git
 data/raw/*
 !data/raw/README.md
+# ...except openly licensed files (attribution in data/raw/README.md)
+!data/raw/toilets/
+data/raw/toilets/*
+!data/raw/toilets/osm_toilets.json
+!data/raw/olle_osm/
+data/raw/olle_osm/*
+!data/raw/olle_osm/overpass_olle_relations.json
+!data/raw/tour_api/
+data/raw/tour_api/*
+!data/raw/tour_api/kto_spots.json

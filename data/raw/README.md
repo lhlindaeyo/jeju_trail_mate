@@ -2,6 +2,18 @@
 
 직접 내려받은 원본 파일을 아래 폴더에 **파일명 그대로** 넣습니다. 이용 조건을 확인하기 전에는 저장소에 커밋되지 않습니다(.gitignore).
 
+## 저장소에 포함된 파일과 출처
+
+이용 조건이 열린 아래 세 파일만 저장소에 넣었습니다. 다시 쓰거나 나눌 때도 출처를 함께 표시하세요.
+
+| 파일 | 출처 | 이용 조건 |
+|---|---|---|
+| `toilets/osm_toilets.json` | © OpenStreetMap contributors — 제주 공중화장실 (Overpass API) | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) · 출처 표시, 이 파일을 고쳐 배포하면 같은 ODbL로 |
+| `olle_osm/overpass_olle_relations.json` | © OpenStreetMap contributors — 제주올레 경로(route relation) | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) · 위와 같음 |
+| `tour_api/kto_spots.json` | 한국관광공사 TourAPI 국문 관광정보 서비스 ([공공데이터포털 15101578](https://www.data.go.kr/data/15101578/openapi.do)) | 이용허락범위 제한 없음 · 안내문 공공누리 제1유형(출처 표시: 한국관광공사) |
+
+넣지 않은 것: 제주올레 공식 안내지도 이미지와 그 좌표·따라 그린 선(사이트 콘텐츠 무단 전재 금지), 이용 조건이 '확인 필요'인 파일, 명령으로 다시 받을 수 있는 큰 캐시(`olle_traced/ways_*.json`).
+
 | 폴더 | 파일 | 현재 상태 (2026-11-05) |
 |---|---|---|
 | `hayoung_olle/` | 하영올레 SHP — 코스별 6개 파일 `hayoung-olle-course-N.{shp,shx,dbf,prj,cpg,qmd}` | 1·2·3코스 적재 완료 (8.84 / 5.87 / 6.23 km, 공시 8.4 / 5.8 / 6.2 km) |
