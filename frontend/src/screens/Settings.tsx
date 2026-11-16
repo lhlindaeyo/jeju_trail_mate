@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
 
-const INTERESTS = ["바다", "오름", "숲", "카페", "문화", "마을", "일출", "풍경"];
 const NOTIFY_TYPES: [string, string, string][] = [
   ["route_notice", "공식 우회·통제 공지 (안전)", "공식 우회·통제 소식이 있을 때 알려줘요."],
   ["end_time_risk", "종료 시각·일몰 임박 (안전)", "해 지기 전에 못 끝낼 것 같으면 알려줘요."],
@@ -22,7 +21,6 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
 
   const set = (k: string, v: unknown) => setP({ ...p, [k]: v });
   const setConsent = (k: string, v: boolean) => setP({ ...p, consents: { ...p.consents, [k]: v } });
-  const toggleInterest = (i: string) => set("interests", p.interests.includes(i) ? p.interests.filter((x: string) => x !== i) : [...p.interests, i]);
   const ns = p.notification_settings ?? {};
   const setType = (k: string, v: boolean) => set("notification_settings", { ...ns, types: { ...(ns.types ?? {}), [k]: v } });
 
@@ -34,7 +32,7 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
         body: {
           daily_distance_target_km: Number(p.daily_distance_target_km), pace_kmh: Number(p.pace_kmh),
           walk_start_time: p.walk_start_time, walk_end_time: p.walk_end_time, rest_every_minutes: Number(p.rest_every_minutes),
-          interests: p.interests, notification_settings: p.notification_settings,
+          notification_settings: p.notification_settings,
           consent_ai_processing: p.consents.ai_processing,
           consent_location: p.consents.location, consent_microphone: p.consents.microphone,
         },
@@ -55,10 +53,6 @@ export function PrefsForm({ onSaved, submitLabel = "저장" }: { onSaved?: () =>
           <label className="field">걷기 종료 목표<input type="time" value={p.walk_end_time} onChange={(e) => set("walk_end_time", e.target.value)} /></label>
         </div>
         <label className="field">휴식 알림 간격(분, 0이면 끔)<input type="number" min={0} max={300} value={p.rest_every_minutes} onChange={(e) => set("rest_every_minutes", e.target.value)} /></label>
-        <div className="muted small" style={{ margin: "8px 0 4px" }}>관심사</div>
-        <div className="chips">
-          {INTERESTS.map((i) => <button key={i} className={`chip ${p.interests.includes(i) ? "on" : ""}`} onClick={() => toggleInterest(i)} aria-pressed={p.interests.includes(i)}>{i}</button>)}
-        </div>
       </div>
 
       <div className="card">

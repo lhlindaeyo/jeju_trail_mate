@@ -325,3 +325,9 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .block input[type="text"] { width: 100%; }
 .block .chip { min-height: 30px; padding: 4px 10px; }
 .block .chip:disabled { opacity: .35; }
+
+/* 시작 화면 기능 설명 */
+.feat { display: flex; gap: 12px; align-items: center; }
+.feat .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; background: var(--teal-soft); }
+.feat .ic svg { width: 22px; height: 22px; stroke: var(--teal-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.feat p { margin: 0; font-size: 16px; line-height: 1.6; }

@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { markOnboarded } from "../api";
+import { NAV_ICONS } from "../App";
 import { PrefsForm } from "./Settings";
+
+const FEATURES: { icon: keyof typeof NAV_ICONS; text: string }[] = [
+  { icon: "explore", text: "걷고 싶은 길과 날짜를 고르면 하루 일정을 짜 드려요." },
+  { icon: "brief", text: "걷는 동안에는 해 지기 전에 도착할 수 있는지, 앞에 쉴 곳이 있는지, 날씨는 어떤지 한눈에 알려 드려요." },
+  { icon: "ai", text: "궁금한 건 언제든 꼬마하르방 제돌이에게 물어보세요." },
+];
 
 export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
   const [step, setStep] = useState<"intro" | "prefs">("intro");
@@ -12,15 +19,14 @@ export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) 
           <div className="brand">JEJU TRAIL MATE</div>
           <h1 className="title">제주를 걷는 동안엔<br />믿음직한 길동무.</h1>
           <div className="card stack">
-            <div><strong>PLAN</strong> · 기간·체력·귀환 시각에 맞춘 코스 일정 초안 (승인해야 확정)</div>
-            <div><strong>WALK</strong> · 하영올레는 경유지 도착·경로 이탈까지, 제주올레는 거리·공지·일몰 알림</div>
-            <div><strong>AHEAD</strong> · 앞길 브리핑: 일몰 전 도착 여부, 앞쪽 화장실·식당, 다음 경유지, 공지, 하루 날씨</div>
+            {FEATURES.map((f) => (
+              <div key={f.icon} className="feat">
+                <span className="ic" aria-hidden="true">{NAV_ICONS[f.icon]}</span>
+                <p>{f.text}</p>
+              </div>
+            ))}
           </div>
-          <div className="card muted small stack">
-            <div>위치·마이크 권한은 처음부터 요구하지 않고, 해당 기능을 쓰는 순간에 목적을 설명하고 요청합니다.</div>
-            <div>이 앱은 구조·구급 서비스가 아닙니다. 위급할 때는 119에 연락하세요.</div>
-            <div>JEJU TRAIL MATE는 사단법인 제주올레가 운영·보증하는 서비스가 아닙니다.</div>
-          </div>
+          <p className="muted small" style={{ margin: "0 4px" }}>이 앱은 구조·구급 서비스가 아니에요. 위급할 때는 119에 연락하세요.</p>
           <button className="btn big" onClick={() => setStep("prefs")}>시작하기</button>
         </div>
       )}

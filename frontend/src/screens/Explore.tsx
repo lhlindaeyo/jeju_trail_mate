@@ -44,8 +44,10 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
           .bindTooltip(w.name).addTo(g);
       }
       m.fitBounds(L.latLngBounds(path).pad(0.35), { maxZoom: 14, animate: true });
-    } else {
-      m.setView(JEJU, 9, { animate: true });
+    } else if (!route || !route.has_geometry) {
+      // 선택이 없거나 그릴 경로가 없는 코스일 때만 섬 전체로 돌아간다.
+      // 경로가 아직 로딩 중일 때 축소 애니메이션을 시작하면, 곧 도착하는 확대(fitBounds)가 애니메이션 중이라 무시된다.
+      m.setView(JEJU, 9, { animate: false });
     }
   }, [route?.id, detail, path.length]); // eslint-disable-line react-hooks/exhaustive-deps
 

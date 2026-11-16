@@ -50,7 +50,7 @@ function store(k: string, v?: string | null): string | null {
 }
 const pageFromHash = (): Page => (PAGES as string[]).includes(location.hash.slice(1)) ? (location.hash.slice(1) as Page) : "home";
 
-const NAV_ICONS: Record<Page, ReactNode> = {
+export const NAV_ICONS: Record<Page, ReactNode> = {
   home: <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5V20H4z" /><path d="M10 20v-5h4v5" /></svg>,
   explore: <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></svg>,
   ai: <svg viewBox="0 0 24 24"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" /><path d="M12 8.2v4.6M9.7 10.5h4.6" /></svg>,
