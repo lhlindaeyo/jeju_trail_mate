@@ -2,6 +2,9 @@
 
     python -m app.data_import all          ../data/raw     # every dataset present + the 착한가격업소 Open API
     python -m app.data_import olle         ../data/raw/olle_course_status
+    python -m app.data_import olle-fetch                             # jejuolle.org 시작·종점 좌표 + OSM 경로 → data/raw/olle_official, olle_osm
+    python -m app.data_import olle-endpoints [../data/raw/olle_official]   # 공식 시작·종점 좌표 적재
+    python -m app.data_import olle-osm [../data/raw/olle_osm]        # OSM 경로선 적재 (공식 거리·시종점으로 검증한 코스만)
     python -m app.data_import hayoung      ../data/raw/hayoung_olle [--inspect]
     python -m app.data_import poi          ../data/raw/poi           # CSV files in the folder
     python -m app.data_import goodprice                              # 서귀포시 착한가격업소 OpenAPI (no key)
@@ -23,7 +26,7 @@ from ..config import get_settings
 from ..db import Base, SessionLocal, engine
 from ..services.route_service import seed_routes
 from ..services.tour_service import seed_tour_source
-from . import hayoung_shp, locate_waypoints, olle_csv, poi_csv, poi_sources
+from . import hayoung_shp, locate_waypoints, olle_csv, olle_official, olle_osm, poi_csv, poi_sources
 from .common import ImportError_
 
 
@@ -82,8 +85,8 @@ def _geocode_tools(a) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.data_import")
-    ap.add_argument("kind", choices=["olle", "hayoung", "poi", "goodprice", "locate-waypoints", "all",
-                                     "juso-inspect", "geocode", "sbiz-fetch"])
+    ap.add_argument("kind", choices=["olle", "olle-fetch", "olle-endpoints", "olle-osm", "hayoung", "poi", "goodprice",
+                                     "locate-waypoints", "all", "juso-inspect", "geocode", "sbiz-fetch"])
     ap.add_argument("folder", type=Path, nargs="?")
     ap.add_argument("--address", help="geocode: 주소 또는 장소명")
     ap.add_argument("--sigungu", default="50130", help="sbiz-fetch: 시군구코드 (서귀포시 50130, 제주시 50110)")
@@ -94,6 +97,21 @@ def main(argv=None) -> int:
     ap.add_argument("--geocode", action="store_true", help="CSV 주소를 카카오로 지오코딩")
     a = ap.parse_args(argv)
     _export_keys()
+    raw = Path("../data/raw")
+
+    if a.kind == "olle-fetch":
+        sys.stdout.reconfigure(encoding="utf-8")
+        root = a.folder or raw
+        result = {}
+        for name, mod, sub in (("official", olle_official, "olle_official"), ("osm", olle_osm, "olle_osm")):
+            try:
+                result[name] = mod.fetch(root / sub)
+            except ImportError_ as e:
+                result[name] = {"error": str(e)}
+            except Exception as e:  # network
+                result[name] = {"error": f"{type(e).__name__}: {e}"}
+        print(json.dumps(result, ensure_ascii=False, indent=1, default=str))
+        return 1 if any("error" in v for v in result.values()) else 0
 
     if a.kind in ("juso-inspect", "geocode", "sbiz-fetch"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -110,22 +128,28 @@ def main(argv=None) -> int:
         seed_tour_source(db)
         jobs: list[tuple[str, Path | None]] = []
         if a.kind == "all":
-            root = a.folder or Path("../data/raw")
-            for sub, kind in (("olle_course_status", "olle"), ("hayoung_olle", "hayoung"), ("poi", "poi")):
+            root = a.folder or raw
+            for sub, kind in (("olle_course_status", "olle"), ("olle_official", "olle-endpoints"), ("olle_osm", "olle-osm"),
+                              ("hayoung_olle", "hayoung"), ("poi", "poi")):
                 d = root / sub
-                if d.exists() and any(p.suffix in (".csv", ".shp") for p in d.iterdir()):
+                if d.exists() and any(p.suffix in (".csv", ".shp", ".json") for p in d.iterdir()):
                     jobs.append((kind, d))
             jobs.append(("goodprice", None))
             jobs.append(("locate-waypoints", None))
         else:
             if a.kind in ("olle", "hayoung", "poi") and not a.folder:
                 ap.error("folder is required")
-            jobs.append((a.kind, a.folder))
+            default = {"olle-endpoints": raw / "olle_official", "olle-osm": raw / "olle_osm"}.get(a.kind)
+            jobs.append((a.kind, a.folder or default))
         results = {}
         for kind, folder in jobs:
             try:
                 if kind == "olle":
                     results[kind] = olle_csv.run(db, folder, license=a.license, dry_run=a.dry_run)
+                elif kind == "olle-endpoints":
+                    results[kind] = olle_official.run(db, folder, license=a.license, dry_run=a.dry_run)
+                elif kind == "olle-osm":
+                    results[kind] = olle_osm.run(db, folder, license=a.license, dry_run=a.dry_run)
                 elif kind == "hayoung" and a.inspect:
                     results[kind] = hayoung_shp.inspect(folder)
                 elif kind == "hayoung":

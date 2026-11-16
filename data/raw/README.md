@@ -6,6 +6,8 @@
 |---|---|---|
 | `hayoung_olle/` | 하영올레 SHP — 코스별 6개 파일 `hayoung-olle-course-N.{shp,shx,dbf,prj,cpg,qmd}` | 1·2·3코스 적재 완료 (8.84 / 5.87 / 6.23 km, 공시 8.4 / 5.8 / 6.2 km) |
 | `olle_course_status/` | 제주특별자치도_올레코스현황 CSV | 있음 (29개 코스, 기준일 2026-07-31) |
+| `olle_official/` | `road_endpoints.json` — 제주올레 공식 홈페이지 코스 페이지 스크립트에서 뽑은 코스별 시작·종점 좌표 (`python -m app.data_import olle-fetch`로 받음) | 29개 코스 (2026-11-16). 경로선은 없음. 사진·글·지도 이미지는 쓰지 않음 |
+| `olle_osm/` | `overpass_olle_relations.json` — OpenStreetMap 제주올레 route relation (`olle-fetch`로 받음, ODbL) | 21개 relation 중 공식 거리 ±12%·시작·종점 500m 이내를 통과한 1·2·11·19·20코스만 적재 (2026-11-16) |
 | `poi/` | 공공와이파이 관광지 AP CSV, 서귀포시 착한가격업소 OpenAPI 활용가이드(HWP) | 있음 |
 | `juso_entrc/` | **도로명주소 위치정보 요약DB** 제주특별자치도 파일(.txt 또는 .zip) — 주소 → 좌표 변환용(공공누리 1유형, 출처표시) | 승인 대기. 받은 뒤 `python -m app.data_import juso-inspect`로 형식 확인 |
 
@@ -22,7 +24,9 @@ cd backend
 .venv/Scripts/python -m app.data_import all ../data/raw
 ```
 
-`all`은 폴더의 CSV·SHP, 서귀포시 착한가격업소 OpenAPI(키 불필요), 하영올레 경유지 위치 보정을 차례로 실행합니다.
+제주올레 좌표·경로는 먼저 `.venv/Scripts/python -m app.data_import olle-fetch`로 받은 뒤 `all`(또는 `olle-endpoints` → `olle-osm` 순서)로 적재합니다. OSM 경로는 공식 시작·종점 좌표로 검증하므로 `olle-endpoints`가 먼저 돌아야 합니다.
+
+`all`은 폴더의 CSV·SHP·JSON, 서귀포시 착한가격업소 OpenAPI(키 불필요), 하영올레 경유지 위치 보정을 차례로 실행합니다.
 
 ## 활용가이드(HWP)에서 읽은 API
 

@@ -20,6 +20,24 @@
    "note": "시드에는 경유지 이름·순서만 있음(좌표 없음). SHP 6개 파일을 data/raw/hayoung_olle/에 두고 import 하면 경로·좌표가 적재됨. 경유지 코드 규칙(S/F/순번)은 추정."
   },
   {
+   "id": "olle_official_web",
+   "name": "제주올레 공식 홈페이지 코스 시작·종점 좌표",
+   "provider": "사단법인 제주올레 (jejuolle.org/trail)",
+   "platform_url": "https://www.jejuolle.org/trail#/",
+   "ref_date": null,
+   "license": "확인 필요 (사이트 콘텐츠 무단 전재 금지 — 좌표만 사용, 이용 허락 확인 필요)",
+   "note": "코스 상세 페이지 스크립트의 '지도 앱으로 열기' 시작·종점 좌표만 추출. 경로선 없음. olle-fetch → olle-endpoints."
+  },
+  {
+   "id": "olle_osm",
+   "name": "OpenStreetMap 제주올레 경로(route relation)",
+   "provider": "© OpenStreetMap contributors",
+   "platform_url": "https://www.openstreetmap.org/copyright",
+   "ref_date": null,
+   "license": "ODbL 1.0 (출처 표시: © OpenStreetMap contributors)",
+   "note": "자원봉사자가 그린 경로라 일부 코스만 있음. 공식 거리(±12%)·시작·종점(500m 이내)과 맞는 코스만 적재. olle-fetch → olle-osm."
+  },
+  {
    "id": "seogwipo_food",
    "name": "제주특별자치도 서귀포시_휴게음식점현황",
    "provider": "서귀포시 (공공데이터포털 15055973)",

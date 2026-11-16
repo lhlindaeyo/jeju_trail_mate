@@ -61,7 +61,8 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
               {route.start_point && route.end_point ? ` · ${route.start_point} → ${route.end_point}` : ""}
               {route.distance_km != null ? ` · ${Number(route.distance_km).toFixed(1)}km` : ""}
             </span>
-            {!drawn && <em>{route.has_geometry ? "경로를 불러오는 중…" : "공식 경로 좌표가 없어 길은 그리지 않았어요"}</em>}
+            {!drawn && <em>{route.has_geometry ? "경로를 불러오는 중…" : "검증된 경로 좌표가 없어 길은 그리지 않았어요"}</em>}
+            {drawn && detail?.geometry_attribution && <em>{detail.geometry_attribution}</em>}
           </>
         </div>
       )}
@@ -117,7 +118,10 @@ export default function Explore() {
       {type === "jeju_olle" ? (
         <p className="note">
           사단법인 제주올레 공식 코스 · {src ? `${src.name} 기준(${src.ref_date})` : "올레코스현황 기준"}. 오래된 자료라 거리·시간은
-          <a href="https://www.jejuolle.org/trail#/" target="_blank" rel="noopener"> 공식 사이트</a>에서 최신 확인이 필요해요. 이 앱에는 경로 좌표가 없어요.
+          <a href="https://www.jejuolle.org/trail#/" target="_blank" rel="noopener"> 공식 사이트</a>에서 최신 확인이 필요해요.
+          {routes.some((r) => r.has_geometry)
+            ? " 길이 그려진 코스는 OpenStreetMap 경로 중 공식 거리·시작·종점과 맞는 것만 골랐어요. 실제 리본·간세 표시를 우선하세요."
+            : " 이 앱에는 경로 좌표가 없어요."}
         </p>
       ) : (
         <p className="note">
@@ -145,7 +149,7 @@ export default function Explore() {
           )}
           <div className="row wrap" style={{ marginTop: 8 }}>
             {r.freshness.data_status !== "verified" && <span className="badge warn">최신 확인 필요</span>}
-            {type === "hayoung_olle" && <span className={`badge ${r.has_geometry ? "" : "gray"}`}>{r.has_geometry ? "경로 데이터 있음" : "경로 적재 전"}</span>}
+            <span className={`badge ${r.has_geometry ? "" : "gray"}`}>{r.has_geometry ? "경로 데이터 있음" : type === "hayoung_olle" ? "경로 적재 전" : r.start ? "시작·종점 좌표만" : "좌표 없음"}</span>
           </div>
         </div>
       ))}

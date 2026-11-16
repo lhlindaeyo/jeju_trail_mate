@@ -112,6 +112,10 @@ def route_to_dict(route: TrailRoute, *, with_path: bool = False) -> dict:
     }
     if with_path and route.has_geometry:
         out["path"] = route.path
+        geo_src = route.segments[0].source_id if route.segments else route.source_id
+        out["geometry_source"] = geo_src
+        if geo_src == "olle_osm":  # ODbL: the drawn line must carry the attribution
+            out["geometry_attribution"] = "경로선 © OpenStreetMap contributors (ODbL) · 공식 경로와 다를 수 있음"
     return out
 
 
