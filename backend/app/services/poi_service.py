@@ -12,6 +12,7 @@ import math
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..i18n import t
 from ..models import PoiPlace
 from .geo import haversine_m
 
@@ -23,6 +24,12 @@ CATEGORY_ALIASES = {
 # Wi-Fi AP categories that are not places to rest (still available via category="wifi").
 NOT_REST = ("버스정류소", "전기차충전소", "공항", "터미널", "의료시설", "공공기관")
 CATEGORY_LABEL = {"food": "음식점", "cafe": "카페", "lodging": "숙박", "rest": "쉬어갈 곳", "wifi": "공공와이파이 장소", "toilet": "화장실"}
+CATEGORY_LABEL_EN = {"food": "restaurants", "cafe": "cafés", "lodging": "places to stay", "rest": "places to rest",
+                     "wifi": "public Wi-Fi spots", "toilet": "toilets"}
+
+
+def category_label(category: str) -> str:
+    return t(CATEGORY_LABEL.get(category, category), CATEGORY_LABEL_EN.get(category, category))
 
 
 def _closed(status: str | None) -> bool:
@@ -35,7 +42,7 @@ GOODPRICE_BADGE = "착한가격업소"
 
 def _place(p: PoiPlace, d: float | None) -> dict:
     return {"name": p.name, "category": p.category, "address": p.address, "phone": p.phone, "detail": p.detail,
-            "badge": GOODPRICE_BADGE if p.source_id == GOODPRICE_SOURCE else None,
+            "badge": t(GOODPRICE_BADGE, "Good-price shop") if p.source_id == GOODPRICE_SOURCE else None,
             "distance_m": round(d) if d is not None else None, "location": [p.lat, p.lon] if p.lat is not None else None,
             "location_precision": p.geo_precision, "source_id": p.source_id}
 
@@ -62,19 +69,23 @@ def find_places_near(db: Session, lat: float, lon: float, category: str = "food"
     # '공중화장실' further apart are different places
     seen: set[tuple] = set()
     near = [x for x in near if not ((k := (x[0].name, round(x[0].lat, 3), round(x[0].lon, 3))) in seen or seen.add(k))][:limit]
-    base = {"category": category, "category_label": CATEGORY_LABEL.get(category, category), "radius_m": radius_m,
-            "caveat": "영업 여부·시간은 실시간 정보가 아닙니다. 방문 전 전화나 지도 앱으로 확인하세요."}
+    base = {"category": category, "category_label": category_label(category), "radius_m": radius_m,
+            "caveat": t("영업 여부·시간은 실시간 정보가 아닙니다. 방문 전 전화나 지도 앱으로 확인하세요.",
+                        "Opening status and hours aren't live. Call or check a map app before you go.")}
     if near:
         return {**base, "status": "ok", "places": [_place(p, d) for p, d in near], "sources": _sources([p for p, _ in near]),
                 "message": None}
     all_rows = list(db.scalars(select(PoiPlace).where(PoiPlace.category.in_(cats)).limit(400)))
     if not all_rows:
         return {**base, "status": "unavailable", "places": [], "sources": [],
-                "message": "검증된 장소 데이터가 아직 연결되지 않아 주변 장소를 안내할 수 없어요."}
+                "message": t("검증된 장소 데이터가 아직 연결되지 않아 주변 장소를 안내할 수 없어요.",
+                             "No verified place data is connected yet, so nearby places can't be shown.")}
     if not any(p.lat is not None for p in all_rows):
         # Data exists but has no coordinates yet → address-only list, clearly not "nearby".
         listed = [p for p in all_rows if not _closed(p.open_status)][:5]
         return {**base, "status": "address_only", "places": [_place(p, None) for p in listed], "sources": _sources(listed),
-                "message": "장소 데이터에 좌표가 없어 가까운 순으로 고르지 못했어요. 아래는 주소 기준 목록이에요."}
+                "message": t("장소 데이터에 좌표가 없어 가까운 순으로 고르지 못했어요. 아래는 주소 기준 목록이에요.",
+                             "The place data has no coordinates, so it can't be sorted by distance. Listed by address instead.")}
     return {**base, "status": "ok", "places": [], "sources": _sources(all_rows[:1]),
-            "message": f"반경 {radius_m}m 안에 좌표가 확인된 {CATEGORY_LABEL.get(category, '장소')}가 없어요."}
+            "message": t(f"반경 {radius_m}m 안에 좌표가 확인된 {CATEGORY_LABEL.get(category, '장소')}가 없어요.",
+                         f"No {CATEGORY_LABEL_EN.get(category, 'places')} with known coordinates within {radius_m} m.")}

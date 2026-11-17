@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from ..config import get_settings
+from ..i18n import is_en, t
 from .geo import KST, latlon_to_kma_grid, now_kst
 
 KMA_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
@@ -17,6 +18,25 @@ _CACHE: dict[tuple, tuple[float, dict]] = {}
 CACHE_TTL_S = 20 * 60
 SKY = {"1": "맑음", "3": "구름많음", "4": "흐림"}
 PTY = {"0": "없음", "1": "비", "2": "비/눈", "3": "눈", "4": "소나기"}
+# English for the words above and the source names (results are cached in Korean, translated on the way out)
+EN = {"맑음": "Clear", "구름많음": "Mostly cloudy", "흐림": "Overcast", "없음": "None", "비": "Rain", "비/눈": "Rain/snow",
+      "눈": "Snow", "소나기": "Showers", "기상청 단기예보": "KMA short-range forecast", "기상청 API허브": "KMA API Hub",
+      "공공데이터포털": "data.go.kr"}
+
+
+def _en(v):
+    return EN.get(v, v) if isinstance(v, str) else v
+
+
+def localized(result: dict) -> dict:
+    """A copy of a forecast result in the request's language."""
+    if not is_en() or result.get("status") != "ok":
+        return result
+    src = result["source"]
+    for ko, en in EN.items():
+        src = src.replace(ko, en)
+    return {**result, "source": src,
+            "forecast": [{**f, "sky": _en(f.get("sky")), "precip_type": _en(f.get("precip_type"))} for f in result["forecast"]]}
 
 
 def _latest_base(now: datetime) -> tuple[str, str]:
@@ -33,8 +53,9 @@ def unavailable(reason: str) -> dict:
     return {
         "status": "unavailable",
         "reason": reason,
-        "message": "실시간 예보를 확인하지 못했습니다. 기상청 날씨누리에서 예보를 직접 확인하세요.",
-        "source": "기상청 단기예보",
+        "message": t("실시간 예보를 확인하지 못했습니다. 기상청 날씨누리에서 예보를 직접 확인하세요.",
+                     "Couldn't get the live forecast. Please check the KMA weather site (weather.go.kr) directly."),
+        "source": t("기상청 단기예보", "KMA short-range forecast"),
         "source_url": "https://www.weather.go.kr/",
     }
 
@@ -76,7 +97,7 @@ def get_weather(lat: float, lon: float, hours: int = 12, *, client: httpx.Client
     cache_key = (nx, ny, base_date, base_time, hours)
     hit = _CACHE.get(cache_key)
     if hit and time.time() - hit[0] < CACHE_TTL_S:
-        return hit[1]
+        return localized(hit[1])
     params = {
         "pageNo": 1, "numOfRows": 400, "dataType": "JSON",
         "base_date": base_date, "base_time": base_time, "nx": nx, "ny": ny,
@@ -124,4 +145,4 @@ def get_weather(lat: float, lon: float, hours: int = 12, *, client: httpx.Client
         "forecast": forecast,
     }
     _CACHE[cache_key] = (time.time(), result)
-    return result
+    return localized(result)

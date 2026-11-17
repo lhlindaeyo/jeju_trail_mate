@@ -22,6 +22,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..i18n import t
 from ..models import DataSource
 from .geo import haversine_m
 
@@ -29,6 +30,9 @@ TOUR_FILE = Path(__file__).resolve().parent.parent / "data" / "tour_spots.json"
 OFFICIAL_FILE_NAME = "kto_spots.json"
 CAVEAT = "위치는 대략적이고 운영시간·입장료는 담지 않았어요. 이야기는 전해 내려오는 설화라 사실과 다를 수 있으니 방문 전 공식 안내를 확인하세요."
 OFFICIAL_CAVEAT = "한국관광공사 공식 안내문을 그대로 옮겼어요. 운영시간·입장료는 담지 않았으니 방문 전 확인하세요."
+CAVEAT_EN = ("Locations are approximate and hours or fees aren't included. The stories are folk tales and may not be fact, "
+             "so check official information before you visit.")
+OFFICIAL_CAVEAT_EN = "Taken from the Korea Tourism Organization's official text. Hours and fees aren't included, so check before you visit."
 OFFICIAL_SOURCE = {"id": "kto_tourapi", "name": "한국관광공사 TourAPI 국문 관광정보 서비스",
                    "provider": "한국관광공사 (공공데이터포털 15101578)", "platform_url": "https://www.data.go.kr/data/15101578/openapi.do",
                    "ref_date": None, "license": "이용허락범위 제한 없음 · 안내문 공공누리 제1유형(출처 표시: 한국관광공사)",
@@ -77,11 +81,12 @@ def _source_fields(chosen: list[dict]) -> dict:
     if official and len(official) == len(chosen):
         # shown under the answer as just '출처: [name](url)' — no fetch date
         return {"source": OFFICIAL_SOURCE["name"], "source_url": OFFICIAL_SOURCE["platform_url"],
-                "fetched_at": None, "caveat": OFFICIAL_CAVEAT}
+                "fetched_at": None, "caveat": t(OFFICIAL_CAVEAT, OFFICIAL_CAVEAT_EN)}
     if official:
         return {"source": f"{OFFICIAL_SOURCE['name']} · {s['name']}", "source_url": OFFICIAL_SOURCE["platform_url"],
-                "fetched_at": d["official_fetched_at"], "caveat": f"{OFFICIAL_CAVEAT} 공식 안내문이 없는 곳은 {CAVEAT}"}
-    return {"source": s["name"], "source_url": s["platform_url"], "fetched_at": s["ref_date"], "caveat": CAVEAT}
+                "fetched_at": d["official_fetched_at"],
+                "caveat": t(f"{OFFICIAL_CAVEAT} 공식 안내문이 없는 곳은 {CAVEAT}", f"{OFFICIAL_CAVEAT_EN} For places without one: {CAVEAT_EN}")}
+    return {"source": s["name"], "source_url": s["platform_url"], "fetched_at": s["ref_date"], "caveat": t(CAVEAT, CAVEAT_EN)}
 
 
 def _brief(p: dict, d: float | None) -> dict:
@@ -100,7 +105,8 @@ def _ranked(lat: float | None, lon: float | None, limit: int) -> tuple[list[tupl
 def find_spots(lat: float | None = None, lon: float | None = None, limit: int = 5) -> dict:
     """lat/lon이 있으면 가까운 순, 없으면 파일 순서(서귀포 대표 장소 먼저)."""
     ranked, basis = _ranked(lat, lon, limit)
-    note = None if basis == "nearby" else "내 위치를 몰라 거리순이 아니라 서귀포 대표 관광지부터 보여 드려요."
+    note = None if basis == "nearby" else t("내 위치를 몰라 거리순이 아니라 서귀포 대표 관광지부터 보여 드려요.",
+                                            "Your location is unknown, so Seogwipo's best-known spots come first instead of the nearest.")
     return {"status": "ok", "basis": basis, "places": [_brief(p, d) for d, p in ranked], "note": note,
             **_source_fields([p for _, p in ranked])}
 
@@ -224,7 +230,8 @@ def get_story(spot: str | None = None, lat: float | None = None, lon: float | No
             found = search_official(spot)
             if found:
                 return {"status": "ok", "basis": "official_search", "stories": [found], **_source_fields([found])}
-            return {"status": "not_found", "message": f"'{spot}'은(는) 이야기를 정리해 둔 관광지에 없어요.", "available": names,
+            return {"status": "not_found", "message": t(f"'{spot}'은(는) 이야기를 정리해 둔 관광지에 없어요.",
+                                                        f"'{spot}' isn't one of the spots with a story on file."), "available": names,
                     **_source_fields(spots)}
         chosen = [hit]
     else:

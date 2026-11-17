@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
+from ..i18n import t
 from ..models import TrackingSession, Trip, User
 from ..rules import engine
 from ..services import schedule_service, tracking_service
@@ -34,10 +35,11 @@ def _summary(db: Session, s: TrackingSession) -> dict:
 def start(body: SessionIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     trip = owned_trip(db, user, body.trip_id)
     if body.tracking_mode == "gps" and not user.preferences.consent_location:
-        raise HTTPException(409, "위치 기록 동의가 필요합니다. 동의하지 않으면 수동 기록(tracking_mode=manual)으로 진행할 수 있습니다.")
+        raise HTTPException(409, t("위치 기록 동의가 필요합니다. 동의하지 않으면 수동 기록(tracking_mode=manual)으로 진행할 수 있습니다.",
+                                   "Location recording consent is needed. Without it you can record manually (tracking_mode=manual)."))
     open_ = db.scalar(select(TrackingSession).join(Trip).where(Trip.user_id == user.id, TrackingSession.status != "ended"))
     if open_:
-        raise HTTPException(409, f"진행 중인 세션이 있습니다: {open_.id}")
+        raise HTTPException(409, t(f"진행 중인 세션이 있습니다: {open_.id}", f"A walk is already in progress: {open_.id}"))
     route = None
     if body.route_id:
         route = find_route(db, body.route_id)
@@ -81,7 +83,8 @@ def upload_points(session_id: str, body: PointsIn, user: User = Depends(current_
     if s.tracking_mode != "gps":
         raise HTTPException(409, "manual session does not accept GPS points")
     if not user.preferences.consent_location:
-        raise HTTPException(403, "위치 기록 동의가 철회되어 위치를 저장하지 않습니다.")
+        raise HTTPException(403, t("위치 기록 동의가 철회되어 위치를 저장하지 않습니다.",
+                                   "Location consent was withdrawn, so positions are not saved."))
     result = tracking_service.ingest_points(db, s, [p.model_dump() for p in body.points])
     notes = engine.on_location_batch(db, s, user)
     return {**result, "summary": _summary(db, s), "notifications": [engine.notification_to_dict(n) for n in notes]}

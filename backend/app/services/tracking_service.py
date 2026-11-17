@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..i18n import route_name, t
 from ..models import GpsPoint, TrackingSession, WaypointVisit
 from .geo import KST, as_utc, haversine_m, hhmm_to_minutes, project_on_path, valid_coordinate
 
@@ -190,10 +191,12 @@ def pace_targets(s: TrackingSession, prefs) -> dict | None:
 
 
 NOTES = {
-    "route_geometry": "진행률은 하영올레 경로 데이터(제주데이터허브 SHP) 위에 GPS 위치를 맞춰 계산했습니다.",
-    "gps_distance": "진행률은 GPS 누적 거리를 코스 총거리로 나눈 추정치입니다(공식 경로 좌표 없음).",
-    "manual": "진행률은 직접 입력한 거리 기준입니다.",
-    "none": "이 코스는 거리 데이터가 없어 진행률을 계산하지 않습니다.",
+    "route_geometry": ("진행률은 하영올레 경로 데이터(제주데이터허브 SHP) 위에 GPS 위치를 맞춰 계산했습니다.",
+                       "Progress is your GPS position matched onto the course's path data."),
+    "gps_distance": ("진행률은 GPS 누적 거리를 코스 총거리로 나눈 추정치입니다(공식 경로 좌표 없음).",
+                     "Progress is an estimate: GPS distance walked over the course length (no official path data)."),
+    "manual": ("진행률은 직접 입력한 거리 기준입니다.", "Progress is based on the distance you entered."),
+    "none": ("이 코스는 거리 데이터가 없어 진행률을 계산하지 않습니다.", "This course has no distance data, so progress isn't calculated."),
 }
 
 
@@ -217,7 +220,7 @@ def progress_summary(s: TrackingSession, schedule=None, now: datetime | None = N
         "session_id": s.id,
         "status": s.status,
         "tracking_mode": s.tracking_mode,
-        "route": route.name if route else None,
+        "route": route_name(route) if route else None,
         "route_id": route.id if route else None,
         "trail_type": route.trail_type if route else None,
         "route_distance_km": route.distance_km if route else None,
@@ -235,7 +238,7 @@ def progress_summary(s: TrackingSession, schedule=None, now: datetime | None = N
         "gps_accuracy_m": round(acc) if acc is not None else None,
         "gps_stale": stale if s.tracking_mode == "gps" else False,
         "last_position": [round(s.last_lat, 4), round(s.last_lon, 4)] if s.last_lat is not None else None,
-        "note": NOTES[prog["basis"]],
+        "note": t(*NOTES[prog["basis"]]),
     }
 
 

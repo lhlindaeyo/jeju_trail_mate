@@ -7,6 +7,7 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from ..i18n import route_name, t
 from ..models import AgentProposal, TrackingSession, Trip, User
 from ..services import brief_service, poi_service, route_service, schedule_service, tour_service, weather_service
 from ..services.geo import JEJU_CENTER, now_kst
@@ -132,42 +133,42 @@ class ToolContext:
                                     "duration_min_high", "start_point", "end_point", "has_geometry")}
                  for d in map(route_service.route_to_dict, routes)]
         return {"routes": brief, "sources": [route_service.source_to_dict(s) for s in {r.source for r in routes if r.source}],
-                "note": "하영올레는 서귀포시가 운영하는 별개의 길이며 제주올레 완주에 포함되지 않습니다."}
+                "note": t("하영올레는 서귀포시가 운영하는 별개의 길이며 제주올레 완주에 포함되지 않습니다.", "Hayoung Olle is a separate trail run by Seogwipo City and does not count toward finishing Jeju Olle.")}
 
     def get_waypoints(self, route=None):
         r = route_service.find_route(self.db, route) if route else self._default_route()
         if not r:
-            return {"status": "not_found", "message": "어느 코스인지 알 수 없습니다."}
+            return {"status": "not_found", "message": t("어느 코스인지 알 수 없습니다.", "Not sure which course you mean.")}
         if not r.waypoints:
-            return {"status": "unavailable", "route": r.name,
-                    "message": "이 코스는 경유지 데이터가 없습니다. 공식 사이트에서 확인하세요.", "official_url": r.source_url}
-        return {"route": r.name, "trail_type": r.trail_type, "has_geometry": r.has_geometry,
+            return {"status": "unavailable", "route": route_name(r),
+                    "message": t("이 코스는 경유지 데이터가 없습니다. 공식 사이트에서 확인하세요.", "This course has no waypoint data. Please check the official site."), "official_url": r.source_url}
+        return {"route": route_name(r), "trail_type": r.trail_type, "has_geometry": r.has_geometry,
                 "waypoints": [route_service.waypoint_to_dict(w) for w in r.waypoints],
                 "source": route_service.source_to_dict(r.source)}
 
     def get_next_waypoint(self):
         s = self.session
         if not s or s.status == "ended":
-            return {"status": "unavailable", "message": "진행 중인 트레킹 세션이 없습니다."}
+            return {"status": "unavailable", "message": t("진행 중인 트레킹 세션이 없습니다.", "No walk is in progress.")}
         summary = progress_summary(s, self.today_schedule())
         nxt = summary["next_waypoint"]
         if not nxt:
-            return {"status": "unavailable", "message": "이 코스에는 다음 경유지 정보가 없습니다.", "visited": summary["visited_waypoints"]}
+            return {"status": "unavailable", "message": t("이 코스에는 다음 경유지 정보가 없습니다.", "This course has no next-waypoint data."), "visited": summary["visited_waypoints"]}
         return {"next": nxt, "visited": summary["visited_waypoints"], "progress_basis": summary["progress_basis"],
                 "my_pace_targets": pace_targets(s, self.prefs),
                 "gps_accuracy_m": summary["gps_accuracy_m"],
-                "message": None if nxt["distance_m"] is not None else "경로 데이터가 없어 거리를 계산하지 않았습니다."}
+                "message": None if nxt["distance_m"] is not None else t("경로 데이터가 없어 거리를 계산하지 않았습니다.", "No path data, so the distance wasn't calculated.")}
 
     def get_route(self, route):
         r = route_service.find_route(self.db, route)
         if not r:
-            return {"status": "not_found", "message": f"'{route}' 코스를 데이터에서 찾지 못했습니다."}
+            return {"status": "not_found", "message": t(f"'{route}' 코스를 데이터에서 찾지 못했습니다.", f"Couldn't find course '{route}'.")}
         return route_service.route_to_dict(r)
 
     def get_route_notices(self, route=None):
         r = route_service.find_route(self.db, route) if route else self._default_route()
         if not r:
-            return {"status": "not_found", "message": "어느 코스인지 알 수 없습니다. 코스 번호를 알려 주세요."}
+            return {"status": "not_found", "message": t("어느 코스인지 알 수 없습니다. 코스 번호를 알려 주세요.", "Not sure which course you mean. Please give the course number.")}
         return route_service.notices_payload(self.db, r)
 
     def get_weather(self, lat=None, lon=None, hours=12):
@@ -186,7 +187,7 @@ class ToolContext:
         loc = self._location()
         if not loc:
             return {"status": "unavailable", "places": [],
-                    "message": "현재 위치를 알 수 없습니다. 트레킹 세션을 시작하고 위치 사용을 허용하면 주변 장소를 찾아볼 수 있어요."}
+                    "message": t("현재 위치를 알 수 없습니다. 트레킹 세션을 시작하고 위치 사용을 허용하면 주변 장소를 찾아볼 수 있어요.", "Your location is unknown. Start a walk and allow location to find places nearby.")}
         return poi_service.find_places_near(self.db, loc[0], loc[1], category, radius_m)
 
     def _tour_origin(self) -> tuple[float, float] | None:
@@ -207,52 +208,52 @@ class ToolContext:
     def estimate_arrival(self):
         s = self.session
         if not s or s.status == "ended":
-            return {"status": "unavailable", "message": "진행 중인 트레킹 세션이 없습니다."}
+            return {"status": "unavailable", "message": t("진행 중인 트레킹 세션이 없습니다.", "No walk is in progress.")}
         if not s.route:
-            return {"status": "unavailable", "message": "세션에 코스가 지정되지 않아 남은 거리를 계산할 수 없습니다."}
+            return {"status": "unavailable", "message": t("세션에 코스가 지정되지 않아 남은 거리를 계산할 수 없습니다.", "The walk has no course, so the remaining distance can't be worked out.")}
         prog = route_progress(s)
         if prog["done_m"] is None:
-            return {"status": "unavailable", "message": "이 코스는 거리 데이터가 없어 도착 시각을 계산할 수 없습니다."}
+            return {"status": "unavailable", "message": t("이 코스는 거리 데이터가 없어 도착 시각을 계산할 수 없습니다.", "This course has no distance data, so the arrival time can't be worked out.")}
         out = schedule_service.estimate_arrival(route_distance_km=s.route.distance_km, walked_m=prog["done_m"],
                                                 pace_kmh=self.prefs.pace_kmh, rest_every_minutes=self.prefs.rest_every_minutes)
         out["progress_basis"] = prog["basis"]
         summary = progress_summary(s, self.today_schedule())
         if summary["gps_quality"] == "poor" or summary["gps_stale"]:
             out["confidence"] = "low"
-            out["assumptions"] += " 현재 GPS 신호가 약하거나 오래되어 추정이 부정확할 수 있습니다."
+            out["assumptions"] += t(" 현재 GPS 신호가 약하거나 오래되어 추정이 부정확할 수 있습니다.", " GPS is weak or out of date right now, so this may be off.")
         return out
 
     def get_trip_plan(self):
         if not self.trip:
-            return {"status": "unavailable", "message": "진행 중인 여행이 없습니다."}
+            return {"status": "unavailable", "message": t("진행 중인 여행이 없습니다.", "No trip is in progress.")}
         return {"trip": self.trip.title, "days": schedule_service.plan_view(self.db, self.trip)}
 
     def propose_schedule_change(self, reason, changes):
         if not self.trip:
-            return {"status": "unavailable", "message": "여행이 없어 일정을 제안할 수 없습니다."}
+            return {"status": "unavailable", "message": t("여행이 없어 일정을 제안할 수 없습니다.", "There is no trip, so no plan change can be proposed.")}
         normalized = []
         for ch in changes:
             d = date.fromisoformat(ch["date"])
             if not (self.trip.start_date <= d <= self.trip.end_date):
-                raise ValueError(f"{d}는 여행 기간 밖입니다.")
+                raise ValueError(t(f"{d}는 여행 기간 밖입니다.", f"{d} is outside the trip."))
             route_id = None
             if ch.get("route"):
                 r = route_service.find_route(self.db, str(ch["route"]))
                 if not r:
-                    raise ValueError(f"코스 '{ch['route']}'를 찾을 수 없습니다.")
+                    raise ValueError(t(f"코스 '{ch['route']}'를 찾을 수 없습니다.", f"Couldn't find course '{ch['route']}'."))
                 route_id = r.id
             normalized.append({"date": d.isoformat(), "route_id": route_id, "planned_start": ch.get("planned_start")})
         p = AgentProposal(trip_id=self.trip.id, kind="schedule_change", summary=reason, payload={"changes": normalized})
         self.db.add(p)
         self.db.commit()
         return {"proposal_id": p.id, "status": "pending_user_approval",
-                "message": "일정 변경 제안을 만들었습니다. 사용자가 앱에서 승인해야 반영됩니다."}
+                "message": t("일정 변경 제안을 만들었습니다. 사용자가 앱에서 승인해야 반영됩니다.", "Made a plan change proposal. It applies only after the user approves it in the app.")}
 
     def get_trail_brief(self):
         return brief_service.build_brief(self.db, self.user, self.trip, self.session)
 
     def execute(self, name: str, args: dict):
-        allowed = {t.name for t in TOOLS}
+        allowed = {spec.name for spec in TOOLS}
         if name not in allowed:
             raise ValueError(f"unknown tool {name}")
         return getattr(self, name)(**args)

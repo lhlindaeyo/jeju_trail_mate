@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, gpsQueue, isOnboarded, type Json } from "./api";
+import { t, useLang } from "./i18n";
 import { showSystemNotification } from "./notify";
 import { sim, useSim } from "./sim";
 import Splash from "./screens/Splash";
@@ -57,19 +58,27 @@ export const NAV_ICONS: Record<Page, ReactNode> = {
   ai: <svg viewBox="0 0 24 24"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" /><path d="M12 8.2v4.6M9.7 10.5h4.6" /></svg>,
   brief: <svg viewBox="0 0 24 24"><path d="M4 17h16" /><path d="M7 17a5 5 0 0 1 10 0" /><path d="M12 6v2.5M5.6 9.6l1.7 1.7M18.4 9.6l-1.7 1.7" /><path d="M8 20.5h8" /></svg>,
 };
-const NAV_LABEL: Record<Page, string> = { home: "홈", explore: "코스탐색", ai: "AI동행자", brief: "앞길브리핑" };
+const navLabel = (p: Page) =>
+  ({ home: t("홈", "Home"), explore: t("코스탐색", "Courses"), ai: t("AI동행자", "AI buddy"), brief: t("앞길브리핑", "Trail brief") })[p];
 const GUIDE_KEY = "jtm.guideSeen";
 const tab = (p: Page) => `.nav button[data-tab="${p}"]`;
 // order: settings first, then the bottom tabs from left to right
-const GUIDE_STEPS: GuideStep[] = [
-  { target: 'button.menu[aria-label="메뉴"]', title: "설정 · 메뉴", desc: "여행 일정, 설정·동의, 가상 위치를 여기서 열어요." },
-  { target: tab("home"), title: NAV_LABEL.home, desc: "지도에서 코스를 보고 걷기를 시작·기록해요." },
-  { target: tab("explore"), title: NAV_LABEL.explore, desc: "올레길 코스를 둘러보고 고를 수 있어요." },
-  { target: tab("ai"), title: NAV_LABEL.ai, desc: "궁금한 걸 묻고, 걷는 중 알림을 받아요." },
-  { target: tab("brief"), title: NAV_LABEL.brief, desc: "일몰 전 도착 여부, 앞쪽 편의시설, 날씨를 미리 알려줘요." },
+const guideSteps = (): GuideStep[] => [
+  { target: "button.menu", title: t("설정 · 메뉴", "Settings · Menu"), desc: t("여행 일정, 설정·동의, 가상 위치를 여기서 열어요.", "Open your trip plan, settings & consents, and the demo location here.") },
+  { target: tab("home"), title: navLabel("home"), desc: t("지도에서 코스를 보고 걷기를 시작·기록해요.", "See the course on the map and start and record your walk.") },
+  { target: tab("explore"), title: navLabel("explore"), desc: t("올레길 코스를 둘러보고 고를 수 있어요.", "Browse the Olle trail courses and pick one.") },
+  { target: tab("ai"), title: navLabel("ai"), desc: t("궁금한 걸 묻고, 걷는 중 알림을 받아요.", "Ask anything, and get alerts while you walk.") },
+  { target: tab("brief"), title: navLabel("brief"), desc: t("일몰 전 도착 여부, 앞쪽 편의시설, 날씨를 미리 알려줘요.", "Shows whether you'll arrive before sunset, facilities ahead, and the weather.") },
 ];
 
+type LocState = { kind: "none" } | { kind: "checking" } | { kind: "sim" } | { kind: "live"; acc: number } | { kind: "outside" };
+const locText = (s: LocState) => s.kind === "checking" ? t("위치 확인 중", "Finding location")
+  : s.kind === "sim" ? t("가상 위치 · 시연 모드", "Demo location · demo mode")
+  : s.kind === "live" ? t(`실시간 · 오차 ${Math.round(s.acc)}m`, `Live · ±${Math.round(s.acc)} m`)
+  : s.kind === "outside" ? t("제주 밖 · 예시 위치 표시", "Outside Jeju · showing an example spot") : "";
+
 export default function App() {
+  const lang = useLang();
   const [me, setMe] = useState<Json | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(isOnboarded);
@@ -89,7 +98,8 @@ export default function App() {
   const [pill, setPill] = useState("");
   const [locOn, setLocOn] = useState(false);
   const [pos, setPos] = useState<Position | null>(null);
-  const [locMsg, setLocMsg] = useState("");
+  const [loc, setLoc] = useState<LocState>({ kind: "none" });
+  const locMsg = locText(loc);
   const simOn = useSim((s) => s.enabled);
   const setSimOn = useCallback((on: boolean) => sim.setEnabled(on), []);
   const lastPoll = useRef<string | null>(null);
@@ -169,7 +179,7 @@ export default function App() {
     }
     if (!id) { setCourse(null); return; }
     try { setCourse(await api(`/v1/routes/${id}`)); } catch { setCourse(null); }
-  }, [effectiveCourseId, trip]);
+  }, [effectiveCourseId, trip, lang]); // eslint-disable-line react-hooks/exhaustive-deps -- course names follow the language
   useEffect(() => { if (me) refreshCourse(); }, [me, refreshCourse]);
   useEffect(() => { sim.setCourse(course?.id ?? null, course?.path, course?.start); }, [course]);
   const setCourseId = (id: string | null) => { setCourseIdState(id); store(COURSE_KEY, id); };
@@ -185,15 +195,15 @@ export default function App() {
 
   const recording = Boolean(session && session.status === "active" && session.tracking_mode === "gps");
   useEffect(() => {
-    if (!locOn) { setPos(null); setLocMsg(""); return; }
-    if (!simOn && !("geolocation" in navigator)) { setLocMsg("이 기기에서는 위치를 쓸 수 없어요"); setLocOn(false); return; }
-    setLocMsg("위치 확인 중");
+    if (!locOn) { setPos(null); setLoc({ kind: "none" }); return; }
+    if (!simOn && !("geolocation" in navigator)) { setLoc({ kind: "none" }); setLocOn(false); toast(t("이 기기에서는 위치를 쓸 수 없어요", "Location isn't available on this device")); return; }
+    setLoc({ kind: "checking" });
     const geo = simOn ? sim : navigator.geolocation; // demo mode: simulated walk instead of the device GPS
     const watch = geo.watchPosition((p) => {
       const { latitude: lat, longitude: lon, accuracy: acc } = p.coords;
       const onIsland = lat > JEJU_BOUNDS.minLat && lat < JEJU_BOUNDS.maxLat && lon > JEJU_BOUNDS.minLon && lon < JEJU_BOUNDS.maxLon;
       setPos({ lat, lon, acc, onIsland });
-      setLocMsg(simOn ? "가상 위치 · 시연 모드" : onIsland ? `실시간 · 오차 ${Math.round(acc)}m` : "제주 밖 · 예시 위치 표시");
+      setLoc(simOn ? { kind: "sim" } : onIsland ? { kind: "live", acc } : { kind: "outside" });
       // a fast-forwarded demo walk records proportionally more often, so points stay ~19 m apart like real walking
       const gap = simOn ? MIN_POINT_INTERVAL_MS / sim.snap.speed : MIN_POINT_INTERVAL_MS;
       if (recording && onIsland && Date.now() - lastPointAt.current >= gap) {
@@ -203,7 +213,7 @@ export default function App() {
       }
     }, (e) => {
       setLocOn(false);
-      toast(e.code === e.PERMISSION_DENIED ? "위치 권한을 허용해 주세요" : "위치를 가져오지 못했어요");
+      toast(e.code === e.PERMISSION_DENIED ? t("위치 권한을 허용해 주세요", "Please allow location access") : t("위치를 가져오지 못했어요", "Couldn't get your location"));
     }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
     return () => geo.clearWatch(watch);
   }, [locOn, simOn, recording, session?.session_id, toast]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -233,14 +243,15 @@ export default function App() {
 
   const app = ctx && (
     <AppCtx.Provider value={ctx}>
-      <div className="shell" data-page={page}>
+      {/* keyed by language: every screen remounts and fetches its data again in the new language */}
+      <div className="shell" data-page={page} key={lang}>
         <div className={page === "home" || page === "ai" ? "page" : "page scroll"}><Screen /></div>
 
         <div className="toasts" role="status" aria-live="polite">
           {toasts.map((n) => (
             <div key={n.id} className={`toast-card ${n.severity === "safety" ? "safety" : ""}`}>
               <div className="row"><b className="grow">{n.title}</b>
-                <button className="go" onClick={() => act(n, "dismissed")} aria-label="알림 닫기">닫기</button></div>
+                <button className="go" onClick={() => act(n, "dismissed")} aria-label={t("알림 닫기", "Dismiss alert")}>{t("닫기", "Close")}</button></div>
               <p>{n.message}</p>
               <div className="row wrap">{(n.actions ?? []).map((a: Json) => (
                 <button key={a.id + (a.waypoint_id ?? "")} className="btn sm ghost" onClick={() => act(n, a)}>{a.label}</button>))}</div>
@@ -249,19 +260,19 @@ export default function App() {
         </div>
 
         {page !== "home" && page !== "ai" && <div className="fadebot" aria-hidden="true" />}
-        <nav className="nav" aria-label="주요 메뉴" style={{ ["--i" as string]: PAGES.indexOf(page) }}>
+        <nav className="nav" aria-label={t("주요 메뉴", "Main menu")} style={{ ["--i" as string]: PAGES.indexOf(page) }}>
           <span className="dot" aria-hidden="true" />
           {PAGES.map((p) => (
-            <button key={p} type="button" data-tab={p} aria-label={NAV_LABEL[p]} title={NAV_LABEL[p]} aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>
+            <button key={p} type="button" data-tab={p} aria-label={navLabel(p)} title={navLabel(p)} aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>
               {NAV_ICONS[p]}
-              {p === "home" && recording && <span className="live" aria-label="기록 중" />}
+              {p === "home" && recording && <span className="live" aria-label={t("기록 중", "Recording")} />}
             </button>
           ))}
         </nav>
         <div className={`pilltoast ${pill ? "show" : ""}`} role="status">{pill}</div>
         {sheet === "menu" && <MenuSheet onClose={() => setSheet(null)} />}
         {sheet && sheet !== "menu" && <Sheet name={sheet} onClose={() => setSheet(null)} />}
-        {guideOpen && splash === "gone" && <Guide steps={GUIDE_STEPS} onClose={closeGuide} />}
+        {guideOpen && splash === "gone" && <Guide steps={guideSteps()} onClose={closeGuide} />}
       </div>
     </AppCtx.Provider>
   );
@@ -272,9 +283,9 @@ export default function App() {
   } else if (!me) {
     body = (
       <div className="shell scroll">
-        <h1 className="title">서버에 연결할 수 없어요</h1>
-        <p className="sub">백엔드가 켜져 있는지 확인한 뒤 다시 시도해 주세요.</p>
-        <button className="btn big" onClick={() => { setLoading(true); load(); }}>다시 시도</button>
+        <h1 className="title">{t("서버에 연결할 수 없어요", "Can't reach the server")}</h1>
+        <p className="sub">{t("백엔드가 켜져 있는지 확인한 뒤 다시 시도해 주세요.", "Check that the backend is running, then try again.")}</p>
+        <button className="btn big" onClick={() => { setLoading(true); load(); }}>{t("다시 시도", "Try again")}</button>
       </div>
     );
   } else if (!onboarded && trips.length === 0) {

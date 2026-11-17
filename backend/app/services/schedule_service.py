@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
+from ..i18n import route_name, t
 from ..models import DailySchedule, TrailRoute, Trip, UserPreferences
 from .geo import fmt_hhmm, hhmm_to_minutes, now_kst, sunset_kst
 from .route_service import list_routes
@@ -32,7 +33,8 @@ def estimate_arrival(*, route_distance_km: float | None, walked_m: float, pace_k
                      rest_every_minutes: int, now: datetime | None = None) -> dict:
     now = now or now_kst()
     if route_distance_km is None:
-        return {"status": "unavailable", "message": "코스 거리 데이터가 없어 도착 시각을 계산할 수 없습니다."}
+        return {"status": "unavailable", "message": t("코스 거리 데이터가 없어 도착 시각을 계산할 수 없습니다.",
+                                                      "No course distance data, so the arrival time can't be worked out.")}
     remaining_km = max(route_distance_km - walked_m / 1000.0, 0.0)
     remaining_min = estimate_duration_min(remaining_km, pace_kmh, rest_every_minutes)
     eta = now + timedelta(minutes=remaining_min)
@@ -42,7 +44,8 @@ def estimate_arrival(*, route_distance_km: float | None, walked_m: float, pace_k
         "eta": eta.isoformat(),
         "eta_hhmm": eta.strftime("%H:%M"),
         "sunset_hhmm": sunset_kst(now.date()).strftime("%H:%M"),
-        "assumptions": f"평균 {pace_kmh}km/h, {rest_every_minutes}분마다 {REST_MINUTES}분 휴식 가정. GPS 누적 거리 기준 추정치입니다.",
+        "assumptions": t(f"평균 {pace_kmh}km/h, {rest_every_minutes}분마다 {REST_MINUTES}분 휴식 가정. GPS 누적 거리 기준 추정치입니다.",
+                         f"Assumes {pace_kmh} km/h with a {REST_MINUTES}-min break every {rest_every_minutes} min; estimated from GPS distance."),
     }
 
 
@@ -81,8 +84,8 @@ def _fits(route: TrailRoute | list[TrailRoute], prefs: UserPreferences, start_hh
 
 def _describe(routes: list[TrailRoute]) -> str:
     if routes[0].trail_type == "hayoung_olle":
-        names = " + ".join(f"{r.course_no}코스" for r in routes)
-        return f"하영올레 {names} · 서귀포시청 출발·도착"
+        names = " + ".join(t(f"{r.course_no}코스", r.course_no) for r in routes)
+        return t(f"하영올레 {names} · 서귀포시청 출발·도착", f"Hayoung Olle {names} · start & finish at Seogwipo City Hall")
     r = routes[0]
     return f"{r.start_point} → {r.end_point}"
 
@@ -95,10 +98,11 @@ def _assign(row: DailySchedule, routes: list[TrailRoute], prefs: UserPreferences
     row.planned_end = end
     row.note = _describe(routes)
     if end is None:
-        row.note += " · 거리 데이터 적재 전이라 소요 시간을 계산하지 않았습니다"
-        row.checklist = [*row.checklist, "하영올레 경로 데이터(SHP) 적재 후 소요 시간 다시 계산"]
+        row.note += t(" · 거리 데이터 적재 전이라 소요 시간을 계산하지 않았습니다", " · no distance data loaded yet, so no time estimate")
+        row.checklist = [*row.checklist, t("하영올레 경로 데이터(SHP) 적재 후 소요 시간 다시 계산",
+                                           "Re-estimate the time once the Hayoung Olle path data (SHP) is loaded")]
     elif not ok:
-        row.note += " · 하루 거리 또는 종료 시각(일몰 30분 전)을 넘을 수 있어요"
+        row.note += t(" · 하루 거리 또는 종료 시각(일몰 30분 전)을 넘을 수 있어요", " · may exceed your daily distance or end time (30 min before sunset)")
 
 
 def generate_plan(db: Session, trip: Trip, prefs: UserPreferences, route_ids: list[str] | None = None,
@@ -122,7 +126,7 @@ def generate_plan(db: Session, trip: Trip, prefs: UserPreferences, route_ids: li
         row = DailySchedule(trip_id=trip.id, date=day, revision=_next_revision(db, trip, day), checklist=list(DEFAULT_CHECKLIST))
         start = prefs.walk_start_time
         if day in rest_days:
-            row.note, row.checklist = "휴식일", []
+            row.note, row.checklist = t("휴식일", "Rest day"), []
         elif explicit and remaining:
             today = [remaining.pop(0)]
             while (today[0].trail_type == "hayoung_olle" and remaining and remaining[0].trail_type == "hayoung_olle"
@@ -140,9 +144,10 @@ def generate_plan(db: Session, trip: Trip, prefs: UserPreferences, route_ids: li
                 _assign(row, [r], prefs, start, day)
                 prev_end = r.end_point
             else:
-                row.note = "조건(하루 거리·종료 시각·일몰)에 맞는 코스가 없어 비워 두었습니다."
+                row.note = t("조건(하루 거리·종료 시각·일몰)에 맞는 코스가 없어 비워 두었습니다.",
+                             "Left empty: no course fits your daily distance, end time and sunset.")
         else:
-            row.note, row.checklist = "고른 코스를 모두 배정했어요. 자유 일정", []
+            row.note, row.checklist = t("고른 코스를 모두 배정했어요. 자유 일정", "All picked courses are assigned. Free day"), []
         db.add(row)
         drafts.append(row)
         day += timedelta(days=1)
@@ -153,7 +158,8 @@ def generate_plan(db: Session, trip: Trip, prefs: UserPreferences, route_ids: li
 def hayoung_bundles(db: Session, prefs: UserPreferences, day: date) -> list[dict]:
     """반나절(1) / 하루(1+2) / 여유(3코스 포함) suggestions with honest time estimates."""
     by_no = {r.course_no: r for r in list_routes(db, trail_type="hayoung_olle")}
-    options = [("반나절", ["1"]), ("하루", ["1", "2"]), ("여유 일정", ["3"]), ("전 코스", ["1", "2", "3"])]
+    options = [(t("반나절", "Half day"), ["1"]), (t("하루", "Full day"), ["1", "2"]), (t("여유 일정", "Easy pace"), ["3"]),
+               (t("전 코스", "All courses"), ["1", "2", "3"])]
     out = []
     for label, nos in options:
         routes = [by_no[n] for n in nos if n in by_no]
@@ -163,7 +169,8 @@ def hayoung_bundles(db: Session, prefs: UserPreferences, day: date) -> list[dict
         out.append({"label": label, "route_ids": [r.id for r in routes], "courses": nos,
                     "distance_km": round(sum(r.distance_km for r in routes), 1) if dur is not None else None,
                     "duration_min": dur, "fits_today": ok if dur is not None else None,
-                    "note": None if dur is not None else "경로 데이터 적재 전이라 거리·시간을 계산할 수 없어요"})
+                    "note": None if dur is not None else t("경로 데이터 적재 전이라 거리·시간을 계산할 수 없어요",
+                                                           "Path data isn't loaded yet, so distance and time can't be worked out")})
     return out
 
 
@@ -184,7 +191,7 @@ def propose_changes(db: Session, trip: Trip, prefs: UserPreferences, changes: li
             if ch.get("note"):
                 row.note = ch["note"]
         else:
-            row.note = ch.get("note") or "휴식일"
+            row.note = ch.get("note") or t("휴식일", "Rest day")
             row.checklist = []
         db.add(row)
         drafts.append(row)
@@ -239,7 +246,7 @@ def schedule_to_dict(s: DailySchedule) -> dict:
 
     def brief(x):
         return {"id": x.id, "trail_type": x.trail_type, "course_no": x.course_no, "official_code": x.course_no,
-                "name": x.name, "distance_km": x.distance_km, "start_point": x.start_point, "end_point": x.end_point}
+                "name": route_name(x), "distance_km": x.distance_km, "start_point": x.start_point, "end_point": x.end_point}
 
     extras = [brief(x) for rid in (s.extra_route_ids or []) if (x := object_session(s).get(TrailRoute, rid))]
     return {

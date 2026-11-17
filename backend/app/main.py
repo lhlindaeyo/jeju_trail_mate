@@ -7,6 +7,7 @@ from sqlalchemy import inspect, or_, text
 
 from .config import get_settings
 from .db import Base, SessionLocal, engine
+from .i18n import LangMiddleware
 from .routers import brief, me, misc, routes, sessions, trips
 from .services.route_service import seed_routes
 from .services.tour_service import seed_tour_source
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
                   docs_url="/docs" if s.app_env != "production" else None)
     app.add_middleware(CORSMiddleware, allow_origins=s.cors_origin_list, allow_credentials=False,
                        allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(LangMiddleware)  # ?lang=en → English messages for this request
     for r in (me.router, routes.router, trips.router, sessions.router, brief.router, misc.router):
         app.include_router(r)
 

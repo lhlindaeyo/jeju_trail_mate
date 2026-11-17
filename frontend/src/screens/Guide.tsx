@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 
 export type GuideStep = { target: string; title: string; desc: string };
 
@@ -50,18 +51,18 @@ export default function Guide({ steps, onClose }: { steps: GuideStep[]; onClose:
   }
 
   return (
-    <div className="guide-root" ref={root} role="dialog" aria-modal="true" aria-label="처음 사용 안내">
+    <div className="guide-root" ref={root} role="dialog" aria-modal="true" aria-label={t("처음 사용 안내", "First-time guide")}>
       {placed && <div className="guide-spot" style={{ left: placed.box.x - 4, top: placed.box.y - 4, width: placed.w + 8, height: placed.h + 8 }} />}
       <div className={`guide-bubble ${above ? "above" : "below"}`} style={{ width: BUBBLE_W, ...bubble }}>
         <span className="guide-arrow" style={{ left: arrowLeft }} />
         <div className="guide-head">
           <b>{step.title}</b>
-          <button type="button" className="guide-x" onClick={onClose} aria-label="안내 닫기">×</button>
+          <button type="button" className="guide-x" onClick={onClose} aria-label={t("안내 닫기", "Close guide")}>×</button>
         </div>
         <p>{step.desc}</p>
         <div className="guide-foot">
           <span>{idx + 1} / {steps.length}</span>
-          <button type="button" className="guide-next" onClick={next}>{last ? "완료" : "다음"}</button>
+          <button type="button" className="guide-next" onClick={next}>{last ? t("완료", "Done") : t("다음", "Next")}</button>
         </div>
       </div>
     </div>

@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..config import get_settings
+from ..i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -79,12 +80,12 @@ class AnthropicLLM:
                 **kwargs,
             )
         except self._anthropic.RateLimitError as e:
-            raise LLMUnavailable("AI 요청이 많아 잠시 후 다시 시도해 주세요.") from e
+            raise LLMUnavailable(t("AI 요청이 많아 잠시 후 다시 시도해 주세요.", "The AI is busy. Please try again in a moment.")) from e
         except self._anthropic.APIStatusError as e:
             log.warning("anthropic status error %s request_id=%s", e.status_code, getattr(e, "request_id", None))
-            raise LLMUnavailable("AI 서버 오류가 발생했습니다.") from e
+            raise LLMUnavailable(t("AI 서버 오류가 발생했습니다.", "The AI server had an error.")) from e
         except self._anthropic.APIConnectionError as e:
-            raise LLMUnavailable("AI 서버에 연결할 수 없습니다. 네트워크를 확인하세요.") from e
+            raise LLMUnavailable(t("AI 서버에 연결할 수 없습니다. 네트워크를 확인하세요.", "Can't reach the AI server. Check your network.")) from e
 
     @staticmethod
     def _text(resp) -> str:
@@ -97,7 +98,8 @@ class AnthropicLLM:
         for _ in range(max_turns):
             resp = self._create(max_tokens=16000, system=system, tools=tool_defs, messages=messages)
             if resp.stop_reason == "refusal":
-                return AgentRun(text="이 요청은 도와드리기 어렵습니다. 다른 질문을 해 주세요.", tool_calls=calls, refused=True, provider=self.name)
+                return AgentRun(text=t("이 요청은 도와드리기 어렵습니다. 다른 질문을 해 주세요.", "I can't help with that. Please ask something else."),
+                                tool_calls=calls, refused=True, provider=self.name)
             if resp.stop_reason == "pause_turn":
                 messages.append({"role": "assistant", "content": resp.content})
                 continue
@@ -115,14 +117,19 @@ class AnthropicLLM:
                     calls.append(ToolCall(tu.name, dict(tu.input), False, str(exc)))
                     results.append({"type": "tool_result", "tool_use_id": tu.id, "content": f"Error: {exc}", "is_error": True})
             messages.append({"role": "user", "content": results})
-        return AgentRun(text="요청을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 해 주세요.", tool_calls=calls, provider=self.name)
+        return AgentRun(text=TOO_MANY_STEPS(), tool_calls=calls, provider=self.name)
+
+
+def TOO_MANY_STEPS() -> str:
+    return t("요청을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 해 주세요.",
+             "That needs too many steps. Please split your question and ask again.")
 
 
 def match_intent(user: str, available: set[str]) -> tuple[str, dict] | None:
     """Keyword → (tool, args) for the question part of the prompt, or None."""
     question = user.rsplit("[사용자 질문]", 1)[-1]
     for keywords, tool, args in MockLLM.INTENTS:
-        if tool in available and any(k in question for k in keywords):
+        if tool in available and any(k in question or k in question.lower() for k in keywords):
             return tool, dict(args)
     return None
 
@@ -134,23 +141,24 @@ class MockLLM:
     name = "mock"
     external = False
 
-    INTENTS = [
-        (("이야기", "전설", "유래", "설화"), "get_tour_story", {}),
-        (("관광지", "명소", "가볼", "볼거리"), "find_tour_spots", {}),
-        (("날씨", "비가", "비 오", "비 올", "비오", "비올", "비는", "우산", "바람", "예보"), "get_weather", {}),
-        (("공지", "우회", "통제", "폐쇄"), "get_route_notices", {}),
-        (("브리핑", "앞길", "걸어도", "해 지기", "해지기", "일몰"), "get_trail_brief", {}),
-        (("도착", "남은", "언제", "몇 시"), "estimate_arrival", {}),
-        (("다음 경유지", "다음 포인트", "경유지까지"), "get_next_waypoint", {}),
-        (("경유지",), "get_waypoints", {}),
-        (("카페",), "find_places_near", {"category": "cafe"}),
-        (("식당", "맛집", "밥", "점심", "저녁"), "find_places_near", {"category": "food"}),
-        (("쉬어", "쉼터", "휴식"), "find_places_near", {"category": "rest"}),
-        (("화장실",), "find_places_near", {"category": "toilet"}),
-        (("숙소", "숙박", "게스트하우스"), "find_places_near", {"category": "lodging"}),
-        (("와이파이", "wifi"), "find_places_near", {"category": "wifi"}),
-        (("일정", "계획"), "get_trip_plan", {}),
-        (("코스",), "list_routes", {}),
+    INTENTS = [  # Korean keywords, then English ones (matched on the lower-cased question)
+        (("이야기", "전설", "유래", "설화", "story", "legend", "history", "myth"), "get_tour_story", {}),
+        (("관광지", "명소", "가볼", "볼거리", "sight", "attraction", "tourist", "to visit", "to see"), "find_tour_spots", {}),
+        (("날씨", "비가", "비 오", "비 올", "비오", "비올", "비는", "우산", "바람", "예보",
+          "weather", "rain", "umbrella", "wind", "forecast"), "get_weather", {}),
+        (("공지", "우회", "통제", "폐쇄", "notice", "detour", "closure", "closed"), "get_route_notices", {}),
+        (("브리핑", "앞길", "걸어도", "해 지기", "해지기", "일몰", "brief", "ahead", "sunset", "before dark"), "get_trail_brief", {}),
+        (("도착", "남은", "언제", "몇 시", "arrive", "arrival", "how far", "how long", "left", "remaining", "eta"), "estimate_arrival", {}),
+        (("다음 경유지", "다음 포인트", "경유지까지", "next waypoint", "next stop", "next point"), "get_next_waypoint", {}),
+        (("경유지", "waypoint"), "get_waypoints", {}),
+        (("카페", "cafe", "café", "coffee"), "find_places_near", {"category": "cafe"}),
+        (("식당", "맛집", "밥", "점심", "저녁", "restaurant", "food", "eat", "lunch", "dinner"), "find_places_near", {"category": "food"}),
+        (("쉬어", "쉼터", "휴식", "rest", "break", "shelter"), "find_places_near", {"category": "rest"}),
+        (("화장실", "toilet", "restroom", "bathroom"), "find_places_near", {"category": "toilet"}),
+        (("숙소", "숙박", "게스트하우스", "hotel", "lodging", "guesthouse", "stay"), "find_places_near", {"category": "lodging"}),
+        (("와이파이", "wifi", "wi-fi"), "find_places_near", {"category": "wifi"}),
+        (("일정", "계획", "plan", "schedule", "itinerary"), "get_trip_plan", {}),
+        (("코스", "course", "route", "trail"), "list_routes", {}),
     ]
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
@@ -161,10 +169,13 @@ class MockLLM:
                 out = execute(tool, dict(args))
                 return AgentRun(text=_summarize(tool, out), tool_calls=[ToolCall(tool, args, True, out)], provider=self.name)
             except Exception as exc:
-                return AgentRun(text=f"정보를 가져오지 못했습니다: {exc}", tool_calls=[ToolCall(tool, args, False, str(exc))], provider=self.name)
+                return AgentRun(text=t(f"정보를 가져오지 못했습니다: {exc}", f"Couldn't get that information: {exc}"),
+                                tool_calls=[ToolCall(tool, args, False, str(exc))], provider=self.name)
         return AgentRun(
-            text="(오프라인 모드) 코스·일정·날씨·공지·도착 예상·주변 장소·앞길 브리핑에 대해 물어보실 수 있어요. "
-                 "자유 대화는 AI 키를 설정하면 사용할 수 있습니다.",
+            text=t("(오프라인 모드) 코스·일정·날씨·공지·도착 예상·주변 장소·앞길 브리핑에 대해 물어보실 수 있어요. "
+                   "자유 대화는 AI 키를 설정하면 사용할 수 있습니다.",
+                   "(Offline mode) You can ask about courses, your plan, weather, notices, arrival time, nearby places and "
+                   "what's ahead. Free conversation works once an AI key is set up."),
             provider=self.name,
         )
 
@@ -172,36 +183,41 @@ class MockLLM:
 def _summarize(tool: str, out: Any) -> str:
     if isinstance(out, dict):
         if out.get("status") == "unavailable":
-            return out.get("message") or "정보를 확인할 수 없습니다."
+            return out.get("message") or t("정보를 확인할 수 없습니다.", "That information isn't available.")
         if tool == "estimate_arrival" and "eta_hhmm" in out:
-            return f"남은 거리 약 {out['remaining_km']}km, 예상 도착 {out['eta_hhmm']} (일몰 {out['sunset_hhmm']}). {out['assumptions']}"
+            return t(f"남은 거리 약 {out['remaining_km']}km, 예상 도착 {out['eta_hhmm']} (일몰 {out['sunset_hhmm']}). {out['assumptions']}",
+                     f"About {out['remaining_km']} km to go, arriving around {out['eta_hhmm']} (sunset {out['sunset_hhmm']}). {out['assumptions']}")
         if tool == "get_trail_brief":
-            lines = [out["daylight"].get("message") or "일몰 비교 정보를 확인할 수 없습니다."]
+            lines = [out["daylight"].get("message") or t("일몰 비교 정보를 확인할 수 없습니다.", "Sunset comparison isn't available.")]
             sup = out["supplies"]
             if sup.get("status") == "ok":
                 first = next(((g["label"], g["places"][0]) for g in sup["groups"] if g["places"]), None)
                 if first:
                     p = first[1]
-                    where = f"앞 {p['ahead_m']}m" if p.get("ahead_m") is not None else f"{p['distance_m']}m"
-                    lines.append(f"가까운 {first[0]}: {p['name']} ({where}, 영업 여부는 확인 필요)")
+                    where = t(f"앞 {p['ahead_m']}m", f"{p['ahead_m']} m ahead") if p.get("ahead_m") is not None else f"{p['distance_m']}m"
+                    lines.append(t(f"가까운 {first[0]}: {p['name']} ({where}, 영업 여부는 확인 필요)",
+                                   f"Nearest ({first[0]}): {p['name']} ({where}, check if it's open)"))
             w = out["weather"]
-            lines.append(w.get("headline") or w.get("message") or "날씨를 확인하지 못했습니다.")
+            lines.append(w.get("headline") or w.get("message") or t("날씨를 확인하지 못했습니다.", "Couldn't check the weather."))
             return "\n".join(lines)
         if tool == "get_route_notices":
             notices = out.get("notices", [])
-            head = f"{out.get('route')} 활성 공지 {len(notices)}건." + "".join(f"\n- {n['title']}" for n in notices)
+            head = t(f"{out.get('route')} 활성 공지 {len(notices)}건.", f"{out.get('route')}: {len(notices)} active notice(s).") \
+                + "".join(f"\n- {n['title']}" for n in notices)
             return head + (f"\n{out['caveat']}" if out.get("caveat") else "")
         if tool == "get_weather" and out.get("forecast"):
             f = out["forecast"][0]
-            return f"{f['time'][11:16]} 기준 {f['sky']}, {f['temp_c']}°C, 강수확률 {f['precip_prob_pct']}% (출처: {out['source']}, 발표 {out['base_time']})"
+            return t(f"{f['time'][11:16]} 기준 {f['sky']}, {f['temp_c']}°C, 강수확률 {f['precip_prob_pct']}% (출처: {out['source']}, 발표 {out['base_time']})",
+                     f"At {f['time'][11:16]}: {f['sky']}, {f['temp_c']}°C, {f['precip_prob_pct']}% chance of rain "
+                     f"(source: {out['source']}, issued {out['base_time']})")
         if tool == "find_places_near":
             places = out.get("places", [])
             if not places:
-                return out.get("message") or "주변에서 확인된 장소가 없습니다."
-            src = ", ".join(f"{s['name']}({s['ref_date'] or '기준일 미상'})" for s in out.get("sources", []))
+                return out.get("message") or t("주변에서 확인된 장소가 없습니다.", "No known places nearby.")
+            src = ", ".join(f"{s['name']}({s['ref_date'] or t('기준일 미상', 'date unknown')})" for s in out.get("sources", []))
 
             def line(p: dict) -> str:
-                where = f"{p['distance_m']}m" if p.get("distance_m") is not None else (p.get("address") or "주소 미상")
+                where = f"{p['distance_m']}m" if p.get("distance_m") is not None else (p.get("address") or t("주소 미상", "address unknown"))
                 tag = f" [{p['badge']}]" if p.get("badge") else ""
                 # detail = "메뉴 가격, 메뉴 가격 · 휴무" — show the first three menu items, never cut mid-price.
                 menu = (p.get("detail") or "").split(" · ")[0].strip(", ")
@@ -211,7 +227,7 @@ def _summarize(tool: str, out: Any) -> str:
                 return f"- {p['name']}{tag} ({where}){extra}{phone}"
 
             head = f"{out['message']}\n" if out.get("message") else ""
-            return head + "\n".join(line(p) for p in places[:5]) + f"\n{out['caveat']} 출처: {src}"
+            return head + "\n".join(line(p) for p in places[:5]) + f"\n{out['caveat']} {t('출처', 'Source')}: {src}"
         if tool == "find_tour_spots" and out.get("places"):
             head = f"{out['note']}\n" if out.get("note") else ""
             lines = []
@@ -226,16 +242,16 @@ def _summarize(tool: str, out: Any) -> str:
             body = "\n\n".join(f"{head(s)}\n{s['story']}" for s in out["stories"])
             return f"{body}\n\n{out['caveat']}"
         if tool == "get_tour_story" and out.get("status") == "not_found":
-            return f"{out['message']} 정리된 곳: {', '.join(out['available'])}"
+            return f"{out['message']} {t('정리된 곳', 'Spots on file')}: {', '.join(out['available'])}"
         if tool == "get_next_waypoint" and out.get("next"):
             n = out["next"]
-            dist = f" 약 {n['distance_m']}m 남았어요." if n.get("distance_m") is not None else ""
-            seen = f" 지나온 곳: {', '.join(out['visited'])}." if out.get("visited") else ""
-            return f"다음 경유지는 {n['name']}입니다.{dist}{seen}"
+            dist = t(f" 약 {n['distance_m']}m 남았어요.", f" About {n['distance_m']} m to go.") if n.get("distance_m") is not None else ""
+            seen = t(f" 지나온 곳: {', '.join(out['visited'])}.", f" Passed: {', '.join(out['visited'])}.") if out.get("visited") else ""
+            return t(f"다음 경유지는 {n['name']}입니다.{dist}{seen}", f"The next waypoint is {n['name']}.{dist}{seen}")
         if tool == "get_waypoints" and out.get("waypoints"):
             names = " → ".join(w["name"] for w in out["waypoints"])
-            geo = "" if out.get("has_geometry") else " (경로 좌표 적재 전)"
-            return f"{out['route']} 경유지: {names}{geo}"
+            geo = "" if out.get("has_geometry") else t(" (경로 좌표 적재 전)", " (no path data yet)")
+            return t(f"{out['route']} 경유지: {names}{geo}", f"{out['route']} waypoints: {names}{geo}")
         if "message" in out:
             return str(out["message"])
     return json.dumps(out, ensure_ascii=False, default=str)[:1500]
@@ -318,24 +334,24 @@ class OpenAICompatLLM:
             try:
                 r = self.client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
             except httpx.TimeoutException as e:
-                raise LLMUnavailable("AI 응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.") from e
+                raise LLMUnavailable(t("AI 응답이 너무 오래 걸립니다. 잠시 후 다시 시도해 주세요.", "The AI is taking too long. Please try again in a moment.")) from e
             except httpx.HTTPError as e:
-                raise LLMUnavailable("AI 서버에 연결할 수 없습니다. 네트워크를 확인하세요.") from e
+                raise LLMUnavailable(t("AI 서버에 연결할 수 없습니다. 네트워크를 확인하세요.", "Can't reach the AI server. Check your network.")) from e
             if r.status_code in (401, 403, 429) and n + 1 < attempts:
                 log.warning("%s: key #%d rejected (%s), trying the next key", self.name, self.keys.i, r.status_code)
                 self.keys.reject()
                 continue
             if r.status_code == 429:
-                raise LLMUnavailable("AI 요청이 많아 잠시 후 다시 시도해 주세요.")
+                raise LLMUnavailable(t("AI 요청이 많아 잠시 후 다시 시도해 주세요.", "The AI is busy. Please try again in a moment."))
             if r.status_code >= 400:
                 log.warning("%s status error %s: %s", self.name, r.status_code, r.text[:200])
-                raise LLMUnavailable("AI 서버 오류가 발생했습니다.")
+                raise LLMUnavailable(t("AI 서버 오류가 발생했습니다.", "The AI server had an error."))
             self.keys.advance()
             try:
                 return r.json()
             except ValueError as e:
-                raise LLMUnavailable("AI 서버 응답을 해석할 수 없습니다.") from e
-        raise LLMUnavailable("AI 서버 오류가 발생했습니다.")  # pragma: no cover
+                raise LLMUnavailable(t("AI 서버 응답을 해석할 수 없습니다.", "Couldn't read the AI server's reply.")) from e
+        raise LLMUnavailable(t("AI 서버 오류가 발생했습니다.", "The AI server had an error."))  # pragma: no cover
 
     @staticmethod
     def _message(data: dict) -> dict:
@@ -374,7 +390,7 @@ class OpenAICompatLLM:
                     continue
                 text = _clean_text(msg.get("content"))
                 if not text:
-                    raise LLMUnavailable("AI가 빈 응답을 반환했습니다.")
+                    raise LLMUnavailable(t("AI가 빈 응답을 반환했습니다.", "The AI returned an empty reply."))
                 return AgentRun(text=text, tool_calls=calls, provider=self.name)
             messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": tool_calls})
             for i, tc in enumerate(tool_calls):
@@ -390,7 +406,7 @@ class OpenAICompatLLM:
                     messages.append({"role": "tool", "tool_call_id": call_id, "content": f"Error: bad arguments: {exc}"})
                     continue
                 run_one(call_id, name, args)
-        return AgentRun(text="요청을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 해 주세요.", tool_calls=calls, provider=self.name)
+        return AgentRun(text=TOO_MANY_STEPS(), tool_calls=calls, provider=self.name)
 
 
 class FallbackLLM:
@@ -410,7 +426,7 @@ class FallbackLLM:
             except LLMUnavailable as exc:
                 log.warning("LLM provider %s unavailable (%s); trying next", m.name, exc)
                 last = exc
-        raise last or LLMUnavailable("사용 가능한 AI 제공사가 없습니다.")
+        raise last or LLMUnavailable(t("사용 가능한 AI 제공사가 없습니다.", "No AI provider is available."))
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
         return self._first(lambda m: m.run_tools(system, user, tools, execute, max_turns))

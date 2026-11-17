@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..i18n import route_name, t
 from ..models import Notification, TrackingSession, User
 from ..services import route_service, schedule_service, weather_service
 from ..services.geo import KST, as_utc, haversine_m, hhmm_to_minutes, sunset_kst
@@ -37,12 +38,21 @@ class Event:
         return self.severity == "safety"
 
 
+# Button labels by action id. Saved alerts keep a label, but it is swapped for the request's language on the way out.
+ACTION_LABELS = {"open_map": ("지도 보기", "Open map"), "replan": ("일정 다시 계산", "Re-plan"), "later": ("나중에", "Later"),
+                 "snooze_today": ("오늘은 그만", "Not today"), "open_notice": ("공지 원문 열기", "Open notice"),
+                 "open_brief": ("앞길 보기", "See what's ahead")}
 ACT_MAP = {"id": "open_map", "label": "지도 보기"}
 ACT_REPLAN = {"id": "replan", "label": "일정 다시 계산"}
 ACT_LATER = {"id": "later", "label": "나중에"}
 ACT_SNOOZE = {"id": "snooze_today", "label": "오늘은 그만"}
 ACT_NOTICE = {"id": "open_notice", "label": "공지 원문 열기"}
 ACT_BRIEF = {"id": "open_brief", "label": "앞길 보기"}
+
+
+def _action_label(a: dict) -> dict:
+    pair = ACTION_LABELS.get(a.get("id"))
+    return {**a, "label": t(*pair)} if pair else a
 REMOVED_ACTIONS = {"open_journal"}  # buttons of removed features (diary/photos); alerts carrying them are dropped
 
 
@@ -64,13 +74,14 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
     # 1) Official notices (safety) — and an honest warning when we have not checked recently.
     if route:
         for n in route_service.active_notices(db, route, now):
-            kind = {"detour": "우회", "closure": "통제", "safety": "안전"}.get(n.notice_type, "안내")
-            events.append(Event("route_notice", f"notice:{n.id}", "safety", f"[{kind} 공지] {route.name}",
-                                f"{n.title}\n공식 공지를 확인하고 일정을 다시 검토하세요.", [ACT_NOTICE, ACT_REPLAN],
+            kind = {"detour": t("우회", "Detour"), "closure": t("통제", "Closure"), "safety": t("안전", "Safety")}.get(n.notice_type, t("안내", "Info"))
+            events.append(Event("route_notice", f"notice:{n.id}", "safety", t(f"[{kind} 공지] {route.name}", f"[{kind} notice] {route_name(route)}"),
+                                n.title + t("\n공식 공지를 확인하고 일정을 다시 검토하세요.", "\nCheck the official notice and review your plan."),
+                                [ACT_NOTICE, ACT_REPLAN],
                                 {"url": n.source_url, "verified_at": n.verified_at.isoformat() if n.verified_at else None}))
         if route_service.route_freshness(route, now)["notices_status"] != "checked":
             payload = route_service.notices_payload(db, route)
-            events.append(Event("notice_unverified", f"notice_unverified:{route.id}", "info", "공지 최신 확인 필요",
+            events.append(Event("notice_unverified", f"notice_unverified:{route.id}", "info", t("공지 최신 확인 필요", "Notices need checking"),
                                 payload["caveat"], [ACT_NOTICE, ACT_LATER], {"url": payload["official_url"]}))
 
         # 1b) Waypoint check-ins (routes with located waypoints) → point to the road ahead.
@@ -80,9 +91,10 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
                 continue
             done = w.kind == "F"
             events.append(Event("waypoint_arrival", f"waypoint:{w.id}", "info",
-                                "코스 완주 지점 도착" if done else f"경유지 도착 · {w.name}",
-                                (f"{route.name}의 도착 지점이에요. 수고하셨어요." if done
-                                 else f"{w.name} 근처예요. 앞길의 일몰 여유와 쉴 곳을 확인해 보세요."),
+                                t("코스 완주 지점 도착", "Course finish reached") if done else t(f"경유지 도착 · {w.name}", f"Waypoint reached · {w.name}"),
+                                (t(f"{route.name}의 도착 지점이에요. 수고하셨어요.", f"This is the finish of {route_name(route)}. Well done!") if done
+                                 else t(f"{w.name} 근처예요. 앞길의 일몰 여유와 쉴 곳을 확인해 보세요.",
+                                        f"You're near {w.name}. Check the time to sunset and places to rest ahead.")),
                                 [ACT_LATER] if done else [ACT_BRIEF, ACT_LATER],
                                 {"waypoint": w.name, "data": "하영올레 SHP (제주데이터허브)"}))
 
@@ -90,32 +102,38 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
         if (route.has_geometry and session.off_route_since and session.off_route_m
                 and session.off_route_m > OFF_ROUTE_M and (session.last_accuracy_m or 999) <= ROUTE_MATCH_ACCURACY_M
                 and as_utc(session.last_point_at or now) - as_utc(session.off_route_since) >= OFF_ROUTE_SUSTAIN):
-            events.append(Event("off_route", "off_route", "info", "위치 확인이 필요해요",
-                                f"경로에서 약 {round(session.off_route_m)}m 떨어진 것 같아요. 건물·신호 대기로 생긴 오차일 수 있으니 "
-                                "지도에서 위치를 확인해 주세요.", [ACT_MAP, ACT_LATER], dedupe_window_min=15))
+            off = round(session.off_route_m)
+            events.append(Event("off_route", "off_route", "info", t("위치 확인이 필요해요", "Check your position"),
+                                t(f"경로에서 약 {off}m 떨어진 것 같아요. 건물·신호 대기로 생긴 오차일 수 있으니 지도에서 위치를 확인해 주세요.",
+                                  f"You seem to be about {off} m off the route. It may be GPS error from buildings or waiting at lights, "
+                                  "so please check the map."), [ACT_MAP, ACT_LATER], dedupe_window_min=15))
 
         # 1d) Official Olle courses have no path data: confirm proximity to the end point if known.
         if not route.has_geometry and route.end_lat is not None and session.last_lat is not None and gps_ok:
             d = haversine_m(session.last_lat, session.last_lon, route.end_lat, route.end_lon)
             if d <= ENDPOINT_NEAR_M:
-                events.append(Event("endpoint_near", f"endpoint:{route.id}", "info", "종점 근처",
-                                    f"{route.end_point} 근처(약 {round(d)}m)예요. 도착했다면 걷기를 마쳐 주세요.",
+                events.append(Event("endpoint_near", f"endpoint:{route.id}", "info", t("종점 근처", "Near the finish"),
+                                    t(f"{route.end_point} 근처(약 {round(d)}m)예요. 도착했다면 걷기를 마쳐 주세요.",
+                                      f"You're near {route.end_point} (about {round(d)} m). If you've arrived, end the walk."),
                                     [ACT_MAP, ACT_LATER]))
 
     # 2) Schedule delay — only when GPS is trustworthy (spec guardrail).
     exp, act = summary["expected_progress"], summary["actual_progress"]
     if gps_ok and exp is not None and act is not None and summary["active_minutes"] >= 20:
         if exp - act > s.delay_threshold_ratio:
-            events.append(Event("schedule_delay", "schedule_delay", "info", "계획보다 늦어지고 있어요",
-                                f"예상 진행률 {exp:.0%}, 실제 약 {act:.0%}입니다. 도착 시각을 다시 계산하거나 종료 지점을 조정해 보세요.",
+            events.append(Event("schedule_delay", "schedule_delay", "info", t("계획보다 늦어지고 있어요", "Running behind plan"),
+                                t(f"예상 진행률 {exp:.0%}, 실제 약 {act:.0%}입니다. 도착 시각을 다시 계산하거나 종료 지점을 조정해 보세요.",
+                                  f"Planned progress {exp:.0%}, actual about {act:.0%}. Re-check the arrival time or adjust where you finish."),
                                 [ACT_REPLAN, ACT_MAP, ACT_LATER], dedupe_window_min=s.notification_window_minutes))
 
     # 3) Rest reminder — user-configured interval, no medical claims.
     every = prefs.rest_every_minutes or 0
     if every >= 30 and summary["active_minutes"] >= every:
         bucket = int(summary["active_minutes"] // every)
-        events.append(Event("rest_reminder", f"rest:{bucket}", "info", "잠시 쉬어 갈까요?",
-                            f"{summary['active_minutes']}분째 걷고 있어요. 설정하신 대로 잠깐 쉬어 가는 건 어떨까요?", [ACT_LATER, ACT_SNOOZE]))
+        mins = summary["active_minutes"]
+        events.append(Event("rest_reminder", f"rest:{bucket}", "info", t("잠시 쉬어 갈까요?", "Time for a break?"),
+                            t(f"{mins}분째 걷고 있어요. 설정하신 대로 잠깐 쉬어 가는 건 어떨까요?",
+                              f"You've been walking for {mins} min. How about a short break, as you set?"), [ACT_LATER, ACT_SNOOZE]))
 
     # 4) End time / sunset risk (safety).
     prog = route_progress(session)
@@ -126,10 +144,13 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
         end_target = local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=hhmm_to_minutes(prefs.walk_end_time))
         limit_dt = min(end_target, sunset)
         if eta["remaining_km"] > 0 and datetime.fromisoformat(eta["eta"]) > limit_dt:
-            certainty = "" if gps_ok else " (GPS 신호가 약해 추정이 부정확할 수 있습니다)"
-            events.append(Event("end_time_risk", "end_time_risk", "safety", "종료 목표 시각 이후 도착 예상",
-                                f"예상 도착 {eta['eta_hhmm']}, 일몰 {sunset.strftime('%H:%M')}, 목표 종료 {prefs.walk_end_time}입니다{certainty}. "
-                                "가까운 마을이나 큰길에서 오늘 걷기를 마치고 귀환 수단을 확인하세요.",
+            certainty = "" if gps_ok else t(" (GPS 신호가 약해 추정이 부정확할 수 있습니다)", " (weak GPS, so this estimate may be off)")
+            sun = sunset.strftime("%H:%M")
+            events.append(Event("end_time_risk", "end_time_risk", "safety", t("종료 목표 시각 이후 도착 예상", "Arrival expected after your end time"),
+                                t(f"예상 도착 {eta['eta_hhmm']}, 일몰 {sun}, 목표 종료 {prefs.walk_end_time}입니다{certainty}. "
+                                  "가까운 마을이나 큰길에서 오늘 걷기를 마치고 귀환 수단을 확인하세요.",
+                                  f"Expected arrival {eta['eta_hhmm']}, sunset {sun}, your end time {prefs.walk_end_time}{certainty}. "
+                                  "Finish today at a nearby village or main road and check how to get back."),
                                 [ACT_MAP, ACT_REPLAN], {"calc": eta["assumptions"]}, dedupe_window_min=60))
 
     # 5) Weather — only from official forecast data; skip silently when unavailable.
@@ -142,8 +163,10 @@ def evaluate(db: Session, session: TrackingSession, user: User, now: datetime | 
             except ValueError:
                 pop = 0
             if pop >= RAIN_PROB_THRESHOLD:
-                events.append(Event("weather", f"rain:{f['time'][:13]}", "info", "비 소식",
-                                    f"{f['time'][11:16]}경 강수확률 {pop}% 예보입니다. (출처: {weather['source']}, 발표 {weather['base_time']})",
+                hh = f["time"][11:16]
+                events.append(Event("weather", f"rain:{f['time'][:13]}", "info", t("비 소식", "Rain on the way"),
+                                    t(f"{hh}경 강수확률 {pop}% 예보입니다. (출처: {weather['source']}, 발표 {weather['base_time']})",
+                                      f"{pop}% chance of rain around {hh}. (Source: {weather['source']}, issued {weather['base_time']})"),
                                     [ACT_MAP, ACT_LATER], {"url": weather.get("source_url"), "base_time": weather.get("base_time")}))
                 break
     return events
@@ -203,6 +226,6 @@ def on_location_batch(db: Session, session: TrackingSession, user: User, now: da
 def notification_to_dict(n: Notification) -> dict:
     return {
         "id": n.id, "event_type": n.event_type, "severity": n.severity, "title": n.title, "message": n.message,
-        "actions": n.actions or [], "source": n.source, "created_at": as_utc(n.created_at).isoformat(),
+        "actions": [_action_label(a) for a in (n.actions or [])], "source": n.source, "created_at": as_utc(n.created_at).isoformat(),
         "action_taken": n.action_taken,
     }

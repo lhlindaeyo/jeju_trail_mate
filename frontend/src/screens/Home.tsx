@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { api, gpsQueue } from "../api";
 import { useApp } from "../App";
+import { t } from "../i18n";
 import { SIM_SPEEDS, sim, useSim } from "../sim";
 
 const YELLOW = "#FFC83D";
 const JEJU: [number, number] = [33.38, 126.55];
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTR = "© OpenStreetMap contributors · 개발용 타일";
+const tileAttr = () => t("© OpenStreetMap contributors · 개발용 타일", "© OpenStreetMap contributors · dev tiles");
 
 function fmtKm(m: number | null | undefined) {
   return m == null ? "—" : (m / 1000).toFixed(1);
@@ -62,25 +63,25 @@ function SimPanel() {
   const { locOn, setLocOn, setSimOn } = useApp();
   const play = () => { if (!locOn) setLocOn(true); sim.play(); };
   return (
-    <div className="simpanel" role="group" aria-label="가상 위치 시뮬레이터">
-      <div className="simhead"><b>가상 위치</b><span className="badge yellow">시연</span>
-        <button type="button" className="simoff" onClick={() => setSimOn(false)} aria-label="가상 위치 끄기">끄기</button></div>
+    <div className="simpanel" role="group" aria-label={t("가상 위치 시뮬레이터", "Demo location simulator")}>
+      <div className="simhead"><b>{t("가상 위치", "Demo location")}</b><span className="badge yellow">{t("시연", "Demo")}</span>
+        <button type="button" className="simoff" onClick={() => setSimOn(false)} aria-label={t("가상 위치 끄기", "Turn off demo location")}>{t("끄기", "Off")}</button></div>
       {s.hasPath ? (
         <>
           <input type="range" min={0} max={Math.round(s.total)} step={10} value={Math.round(s.along)}
-            onChange={(e) => { if (!locOn) setLocOn(true); sim.seek(Number(e.target.value)); }} aria-label="코스 위의 위치" />
-          <div className="simkm">{s.free ? "코스 밖 지점" : `${(s.along / 1000).toFixed(2)} / ${(s.total / 1000).toFixed(1)} km`}</div>
+            onChange={(e) => { if (!locOn) setLocOn(true); sim.seek(Number(e.target.value)); }} aria-label={t("코스 위의 위치", "Position on the course")} />
+          <div className="simkm">{s.free ? t("코스 밖 지점", "Off the course") : `${(s.along / 1000).toFixed(2)} / ${(s.total / 1000).toFixed(1)} km`}</div>
           <div className="simrow">
-            <button type="button" className="simplay" onClick={s.playing ? () => sim.pause() : play}>{s.playing ? "멈춤" : s.along >= s.total ? "처음부터" : "걷기"}</button>
+            <button type="button" className="simplay" onClick={s.playing ? () => sim.pause() : play}>{s.playing ? t("멈춤", "Pause") : s.along >= s.total ? t("처음부터", "Restart") : t("걷기", "Walk")}</button>
             {SIM_SPEEDS.map((v) => (
               <button key={v} type="button" className="simspeed" aria-pressed={s.speed === v} onClick={() => sim.setSpeed(v)}>{v}×</button>
             ))}
           </div>
           <button type="button" className={`simoffroute ${s.offRoute ? "on" : ""}`} aria-pressed={s.offRoute} onClick={() => sim.toggleOffRoute()}>
-            {s.offRoute ? "코스로 돌아가기" : "길 벗어나기 (80m)"}</button>
+            {s.offRoute ? t("코스로 돌아가기", "Back to the course") : t("길 벗어나기 (80m)", "Step off the route (80 m)")}</button>
         </>
-      ) : <p className="simnote">이 코스는 경로 좌표가 없어 자동 걷기를 할 수 없어요.</p>}
-      <p className="simnote">지도를 누르면 그곳으로 이동해요.</p>
+      ) : <p className="simnote">{t("이 코스는 경로 좌표가 없어 자동 걷기를 할 수 없어요.", "This course has no path data, so it can't be walked automatically.")}</p>}
+      <p className="simnote">{t("지도를 누르면 그곳으로 이동해요.", "Tap the map to move there.")}</p>
     </div>
   );
 }
@@ -118,7 +119,7 @@ export default function Home() {
   useEffect(() => {
     if (!mapEl.current || map.current) return;
     const m = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(JEJU, 10);
-    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(m);
+    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: tileAttr() }).addTo(m);
     layer.current = L.layerGroup().addTo(m);
     m.on("click", (e: L.LeafletMouseEvent) => { if (sim.snap.enabled) sim.teleport(e.latlng.lat, e.latlng.lng); });
     map.current = m;
@@ -163,7 +164,7 @@ export default function Home() {
       return;
     }
     const ll: [number, number] = pos.onIsland ? [pos.lat, pos.lon] : (course?.path?.[0] ?? course?.start ?? JEJU);
-    const icon = L.divIcon({ className: "", html: '<div class="me-marker"><span role="img" aria-label="내 위치">🍊</span></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+    const icon = L.divIcon({ className: "", html: `<div class="me-marker"><span role="img" aria-label="${t("내 위치", "My location")}">🍊</span></div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
     if (!meMarker.current) {
       meMarker.current = L.marker(ll, { icon, keyboard: false, interactive: false }).addTo(m);
       m.setView(ll, Math.max(m.getZoom(), 15));
@@ -175,14 +176,16 @@ export default function Home() {
 
   // ---- session controls -----------------------------------------------------------------
   const start = async () => {
-    if (!trip) { openSheet("plan"); toast("먼저 여행을 만들어 주세요"); return; }
-    if (!course) { go("explore"); toast("걸을 코스를 먼저 골라 주세요"); return; }
+    if (!trip) { openSheet("plan"); toast(t("먼저 여행을 만들어 주세요", "Create a trip first")); return; }
+    if (!course) { go("explore"); toast(t("걸을 코스를 먼저 골라 주세요", "Pick a course to walk first")); return; }
     setBusy(true);
     try {
       if (!me.consents.location) {
-        if (!confirm("걷는 동안 위치를 기록해 진행률·경유지 도착을 계산해요. 세션을 끝내면 기록을 멈춥니다. 위치 기록에 동의할까요?")) {
+        if (!confirm(t("걷는 동안 위치를 기록해 진행률·경유지 도착을 계산해요. 세션을 끝내면 기록을 멈춥니다. 위치 기록에 동의할까요?",
+          "While you walk, your location is recorded to work out progress and waypoint arrivals. Recording stops when you end the walk. Allow location recording?"))) {
           // A recording without positions has nothing to measure (the app has no screen to type a distance into).
-          toast("위치 기록에 동의해야 걷기를 기록할 수 있어요. 지도와 앞길브리핑은 그대로 쓸 수 있어요");
+          toast(t("위치 기록에 동의해야 걷기를 기록할 수 있어요. 지도와 앞길브리핑은 그대로 쓸 수 있어요",
+            "Walks can only be recorded with location consent. The map and trail brief still work"));
           return;
         }
         await api("/v1/me/preferences", { method: "PATCH", body: { consent_location: true } });
@@ -191,16 +194,16 @@ export default function Home() {
       const r = await api("/v1/sessions", { body: { trip_id: trip.id, route_id: course.id } });
       setSession(r); pushNotifications(r.notifications);
       if (!locOn) setLocOn(true);
-      toast("걷기 기록을 시작했어요");
+      toast(t("걷기 기록을 시작했어요", "Started recording your walk"));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
   const control = async (action: "pause" | "resume" | "end") => {
-    if (action === "end" && !confirm("오늘 걷기를 마칠까요?")) return;
+    if (action === "end" && !confirm(t("오늘 걷기를 마칠까요?", "End today's walk?"))) return;
     if (action !== "resume") await flushGps();
     try {
       const r = await api(`/v1/sessions/${session!.session_id}/${action}`, { method: "POST" });
       setSession(r); pushNotifications(r.notifications);
-      if (action === "end") { gpsQueue.clear(); toast("수고했어요! 오늘 걷기를 마쳤어요"); }
+      if (action === "end") { gpsQueue.clear(); toast(t("수고했어요! 오늘 걷기를 마쳤어요", "Well done! Today's walk is finished")); }
     } catch (e) { toast((e as Error).message); }
   };
   const refresh = async () => {
@@ -211,13 +214,13 @@ export default function Home() {
   };
 
   const isHy = course?.trail_type === "hayoung_olle";
-  const region = !course ? "코스탐색에서 걸을 길을 골라 주세요"
-    : isHy ? "서귀포시 · 서귀포시청 순환"
+  const region = !course ? t("코스탐색에서 걸을 길을 골라 주세요", "Pick a trail in Courses")
+    : isHy ? t("서귀포시 · 서귀포시청 순환", "Seogwipo · loop from Seogwipo City Hall")
     : course.start_point && course.end_point ? `${course.start_point} → ${course.end_point}` : course.name;
 
   return (
-    <section aria-label="홈">
-      <div id="map" ref={mapEl} role="region" aria-label="코스 지도" />
+    <section aria-label={t("홈", "Home")}>
+      <div id="map" ref={mapEl} role="region" aria-label={t("코스 지도", "Course map")} />
       <div className="vignette" />
       <div className="topfade" />
       <header className="top">
@@ -226,38 +229,38 @@ export default function Home() {
             {course && <span className={`badge typebadge ${isHy ? "yellow" : ""}`}>{course.trail_label}</span>}</h1>
           <p>{region}</p>
         </div>
-        <button className="menu" aria-label="메뉴" onClick={() => openSheet("menu")}><i /></button>
+        <button className="menu" aria-label={t("메뉴", "Menu")} onClick={() => openSheet("menu")}><i /></button>
       </header>
       <button className={`locate ${locOn ? "on" : ""}`} type="button" onClick={() => setLocOn(!locOn)} aria-pressed={locOn}>
-        <b /><span>{locOn ? locMsg || "위치 확인 중" : simOn ? "가상 위치 켜기" : "내 위치 켜기"}</span>
+        <b /><span>{locOn ? locMsg || t("위치 확인 중", "Finding location") : simOn ? t("가상 위치 켜기", "Turn on demo location") : t("내 위치 켜기", "Show my location")}</span>
       </button>
       {simOn && <SimPanel />}
 
       <div className="stat">
         <div className="n">{fmtKm(leftM)}<small>km</small></div>
-        <div className="l">목적지까지</div>
+        <div className="l">{t("목적지까지", "To the finish")}</div>
         <button className={`refresh ${spin ? "spin" : ""}`} type="button" onClick={refresh}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>새로고침
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>{t("새로고침", "Refresh")}
         </button>
       </div>
 
       <div className="ctrl">
-        {!active && <button className="primary" onClick={start} disabled={busy}>걷기 시작</button>}
-        {active && session.status === "active" && <button onClick={() => control("pause")}>일시정지</button>}
-        {active && session.status === "paused" && <button className="primary" onClick={() => control("resume")}>다시 걷기</button>}
-        {active && <button className="dark" onClick={() => control("end")}>종료</button>}
+        {!active && <button className="primary" onClick={start} disabled={busy}>{t("걷기 시작", "Start walk")}</button>}
+        {active && session.status === "active" && <button onClick={() => control("pause")}>{t("일시정지", "Pause")}</button>}
+        {active && session.status === "paused" && <button className="primary" onClick={() => control("resume")}>{t("다시 걷기", "Resume")}</button>}
+        {active && <button className="dark" onClick={() => control("end")}>{t("종료", "End")}</button>}
       </div>
 
       <div className="summary">
         <div className={`avatar ${active ? "rec" : ""}`} aria-hidden="true">
         </div>
         <div className="name">
-          <b>{course?.name ?? "코스 미선택"}</b>
-          <span>{active ? `기록 중 · GPS ${session.gps_quality === "poor" ? "약함" : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : "확인 중"}`
-            : totalM != null ? `전체 ${course!.distance_km.toFixed(1)} km` : course ? "거리 계산 예정" : "—"}</span>
+          <b>{course?.name ?? t("코스 미선택", "No course picked")}</b>
+          <span>{active ? `${t("기록 중", "Recording")} · GPS ${session.gps_quality === "poor" ? t("약함", "weak") : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : t("확인 중", "checking")}`
+            : totalM != null ? t(`전체 ${course!.distance_km.toFixed(1)} km`, `${course!.distance_km.toFixed(1)} km total`) : course ? t("거리 계산 예정", "Distance not yet known") : "—"}</span>
         </div>
-        <div className="kv"><b>{active ? fmtKm(shownDoneM) : "0.0"}</b><span>진행 km</span></div>
-        <div className="kv"><b>{fmtKm(leftM)}</b><span>남은 km</span></div>
+        <div className="kv"><b>{active ? fmtKm(shownDoneM) : "0.0"}</b><span>{t("진행 km", "km done")}</span></div>
+        <div className="kv"><b>{fmtKm(leftM)}</b><span>{t("남은 km", "km left")}</span></div>
       </div>
     </section>
   );

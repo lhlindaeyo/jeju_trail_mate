@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
+from ..i18n import t as tr
 from ..models import AgentProposal, Notification, Trip, User
 from ..services import schedule_service
 from ..services.geo import now_kst
@@ -101,7 +102,7 @@ def today(trip_id: str, user: User = Depends(current_user), db: Session = Depend
         if sched.route.distance_km:
             out["estimate"] = {
                 "duration_min": schedule_service.estimate_duration_min(sched.route.distance_km, user.preferences.pace_kmh, user.preferences.rest_every_minutes),
-                "assumptions": f"평균 {user.preferences.pace_kmh}km/h, 휴식 포함",
+                "assumptions": tr(f"평균 {user.preferences.pace_kmh}km/h, 휴식 포함", f"{user.preferences.pace_kmh} km/h on average, breaks included"),
             }
     return out
 
@@ -117,7 +118,7 @@ def generate_plan(trip_id: str, body: PlanIn, user: User = Depends(current_user)
     t = owned_trip(db, user, trip_id)
     drafts = schedule_service.generate_plan(db, t, user.preferences, body.route_ids, body.rest_days, body.trail_type)
     return {"drafts": [schedule_service.schedule_to_dict(d) for d in drafts],
-            "message": "일정 초안입니다. 확인 후 승인해야 확정됩니다."}
+            "message": tr("일정 초안입니다. 확인 후 승인해야 확정됩니다.", "This is a draft plan. It's final only after you approve it.")}
 
 
 class ChangeIn(BaseModel):

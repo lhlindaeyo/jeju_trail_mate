@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { isEn, longDate, t } from "./i18n";
+
 export type Json = Record<string, any>;
 
 const QUEUE_KEY = "jtm.gpsQueue";
@@ -52,11 +54,13 @@ export async function api<T = Json>(path: string, opts: { method?: string; body?
   const headers: Record<string, string> = { "X-Device-Id": getDeviceId() };
   let body: BodyInit | undefined;
   if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
+  // English: the server answers in English too. In the URL (not a header) so the offline cache keeps each language apart.
+  const url = isEn() ? `${path}${path.includes("?") ? "&" : "?"}lang=en` : path;
   let res: Response;
   try {
-    res = await fetch(path, { method: opts.method ?? (body ? "POST" : "GET"), headers, body });
+    res = await fetch(url, { method: opts.method ?? (body ? "POST" : "GET"), headers, body });
   } catch {
-    throw new ApiError(0, "네트워크에 연결할 수 없습니다. 저장된 정보만 볼 수 있어요.");
+    throw new ApiError(0, t("네트워크에 연결할 수 없습니다. 저장된 정보만 볼 수 있어요.", "No network connection. Only saved information is available."));
   }
   if (res.status === 204) return undefined as T;
   const ctype = res.headers.get("content-type") ?? "";
@@ -96,5 +100,5 @@ export const gpsQueue = {
 
 export const fmtDate = (iso: string) => {
   const d = new Date(iso + "T00:00:00");
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
+  return longDate(d.getMonth() + 1, d.getDate(), d.getDay());
 };

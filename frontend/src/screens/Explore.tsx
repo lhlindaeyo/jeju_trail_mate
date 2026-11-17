@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
+import { t } from "../i18n";
 import PageHead from "./PageHead";
 
 type TT = "jeju_olle" | "hayoung_olle";
@@ -12,7 +13,7 @@ const TILE_CREDIT = "© OpenStreetMap contributors";
 const TEAL = "#0f8f9b";
 
 function dur(r: Json) {
-  if (r.duration_min_low && r.duration_min_high) return `${r.duration_min_low / 60}~${r.duration_min_high / 60}시간`;
+  if (r.duration_min_low && r.duration_min_high) return t(`${r.duration_min_low / 60}~${r.duration_min_high / 60}시간`, `${r.duration_min_low / 60}–${r.duration_min_high / 60} h`);
   return null;
 }
 
@@ -62,11 +63,11 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
 
   return (
     <div className="xmap-wrap">
-      <div className="xmap" ref={el} role="region" aria-label="제주도 지도" />
+      <div className="xmap" ref={el} role="region" aria-label={t("제주도 지도", "Map of Jeju")} />
       {route && (
         <div className="xmap-chip" aria-live="polite">
           <>
-            <b>{type === "jeju_olle" ? `올레 ${route.course_no}코스` : route.name}</b>
+            <b>{type === "jeju_olle" ? t(`올레 ${route.course_no}코스`, `Olle Route ${route.course_no}`) : route.name}</b>
             <span>
               {route.start_point && route.end_point ? ` · ${route.start_point} → ${route.end_point}` : ""}
               {route.distance_km != null ? ` · ${Number(route.distance_km).toFixed(1)}km` : ""}
@@ -114,20 +115,20 @@ export default function Explore() {
   const pick = (r: Json) => {
     // while a walk is recording, Home keeps showing that walk's course, so a change here would be silently ignored
     if (session && session.status !== "ended" && session.route_id && session.route_id !== r.id) {
-      toast("걷는 중에는 코스를 바꿀 수 없어요. 홈에서 걷기를 종료해 주세요");
+      toast(t("걷는 중에는 코스를 바꿀 수 없어요. 홈에서 걷기를 종료해 주세요", "You can't change course during a walk. End the walk on Home first"));
       return;
     }
     setCourseId(r.id);
     go("home");
-    toast(`${r.name}로 바꿨어요`);
+    toast(t(`${r.name}로 바꿨어요`, `Switched to ${r.name}`));
   };
 
   return (
-    <section aria-label="코스탐색">
-      <PageHead title="코스탐색" sub="걷고 싶은 길을 고르세요." />
-      <div className="seg" role="group" aria-label="길 종류">
-        <button type="button" aria-pressed={type === "jeju_olle"} onClick={() => setType("jeju_olle")}>제주올레</button>
-        <button type="button" aria-pressed={type === "hayoung_olle"} onClick={() => setType("hayoung_olle")}>하영올레</button>
+    <section aria-label={t("코스탐색", "Courses")}>
+      <PageHead title={t("코스탐색", "Courses")} sub={t("걷고 싶은 길을 고르세요.", "Pick the trail you'd like to walk.")} />
+      <div className="seg" role="group" aria-label={t("길 종류", "Trail type")}>
+        <button type="button" aria-pressed={type === "jeju_olle"} onClick={() => setType("jeju_olle")}>{t("제주올레", "Jeju Olle")}</button>
+        <button type="button" aria-pressed={type === "hayoung_olle"} onClick={() => setType("hayoung_olle")}>{t("하영올레", "Hayoung Olle")}</button>
       </div>
       <CourseMap route={selected} detail={detail} type={type} />
       {err && <p className="err">{err}</p>}
@@ -137,14 +138,15 @@ export default function Explore() {
           <div className="row">
             <div className={`num ${type === "hayoung_olle" ? "hy" : ""}`}>{r.course_no}</div>
             <div className="grow">
-              <b>{type === "jeju_olle" ? `올레 ${r.course_no}코스 · ${r.subtitle ?? ""}` : r.name}</b>
+              <b>{type === "jeju_olle" ? `${t(`올레 ${r.course_no}코스`, `Olle Route ${r.course_no}`)} · ${r.subtitle ?? ""}` : r.name}</b>
               <span>
                 {type === "jeju_olle"
-                  ? `${r.distance_km?.toFixed(1)} km · ${dur(r) ?? "시간 정보 없음"}${r.start_point && r.end_point ? ` · ${r.start_point} - ${r.end_point}` : ""}`
-                  : `서귀포시청 출발·도착 · 경유지 ${r.waypoints.length - 2}곳 · ${r.distance_km != null ? `${r.distance_km} km` : "거리 계산 예정"}`}
+                  ? `${r.distance_km?.toFixed(1)} km · ${dur(r) ?? t("시간 정보 없음", "no time info")}${r.start_point && r.end_point ? ` · ${r.start_point} - ${r.end_point}` : ""}`
+                  : t(`서귀포시청 출발·도착 · 경유지 ${r.waypoints.length - 2}곳 · ${r.distance_km != null ? `${r.distance_km} km` : "거리 계산 예정"}`,
+                      `Start & finish at Seogwipo City Hall · ${r.waypoints.length - 2} waypoints · ${r.distance_km != null ? `${r.distance_km} km` : "distance not yet known"}`)}
               </span>
             </div>
-            <button className="go" type="button" onClick={(e) => { e.stopPropagation(); pick(r); }}>홈에서 보기</button>
+            <button className="go" type="button" onClick={(e) => { e.stopPropagation(); pick(r); }}>{t("홈에서 보기", "View on Home")}</button>
           </div>
           {type === "hayoung_olle" && (
             <div className="wps">{r.waypoints.filter((w: Json) => w.kind === "W").map((w: Json) => <i key={w.id}>{w.name}</i>)}</div>

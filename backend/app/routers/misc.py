@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..agent import orchestrator
 from ..auth import current_user, require_admin
 from ..db import get_db
+from ..i18n import route_name, t
 from .. import push
 from ..models import AuditEvent, Notification, PushSubscription, RouteNotice, TrackingSession, Trip, User
 from ..rules.engine import notification_to_dict
@@ -99,8 +100,9 @@ def push_test(user: User = Depends(current_user), db: Session = Depends(get_db))
     st = push.status()
     if not st["enabled"]:
         return {**st, "sent": 0}
-    out = push.send(db, user.id, {"id": "test", "title": "JEJU TRAIL MATE 알림 확인",
-                                  "body": "이렇게 잠금화면과 상단 배너에 알림이 와요.", "severity": "info", "url": "/#brief"})
+    out = push.send(db, user.id, {"id": "test", "title": t("JEJU TRAIL MATE 알림 확인", "JEJU TRAIL MATE test alert"),
+                                  "body": t("이렇게 잠금화면과 상단 배너에 알림이 와요.", "Alerts will show up like this on your lock screen and banner."),
+                                  "severity": "info", "url": "/#brief"})
     return {**st, **out}
 
 
@@ -150,7 +152,7 @@ def export_data(user: User = Depends(current_user), db: Session = Depends(get_db
         out.append({
             "trip": {"id": t.id, "title": t.title, "start_date": t.start_date.isoformat(), "end_date": t.end_date.isoformat()},
             "plan": plan_view(db, t),
-            "sessions": [{"id": s.id, "route": s.route.name if s.route else None, "started_at": s.started_at.isoformat(),
+            "sessions": [{"id": s.id, "route": route_name(s.route) if s.route else None, "started_at": s.started_at.isoformat(),
                           "ended_at": s.ended_at.isoformat() if s.ended_at else None, "distance_m": s.distance_m,
                           "points": [{"t": p.timestamp.isoformat(), "lat": p.lat, "lon": p.lon, "acc": p.accuracy_m} for p in s.points]}
                          for s in t.sessions],
@@ -168,7 +170,7 @@ def delete_account(user: User = Depends(current_user), db: Session = Depends(get
     db.delete(user)
     db.add(AuditEvent(user_id=uid, event_type="account_deleted", resource_type="user", resource_id=uid))
     db.commit()
-    return {"deleted": True, "note": "이 기기에 저장된 여행·이동 기록을 모두 삭제했어요."}
+    return {"deleted": True, "note": t("이 기기에 저장된 여행·이동 기록을 모두 삭제했어요.", "All trips and walk records for this device were deleted.")}
 
 
 # --- admin: verified course data & notices (spec §02 데이터 갱신 전략) ---------------

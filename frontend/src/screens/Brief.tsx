@@ -1,28 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Json } from "../api";
 import { useApp } from "../App";
+import { longDate, t, weekday } from "../i18n";
 import PageHead from "./PageHead";
 
 const REFRESH_MS = 60_000;
-const STATUS_LABEL: Record<string, string> = { ok: "여유 있어요", tight: "빠듯해요", late: "일몰 이후 도착", done: "코스 끝", unavailable: "확인 불가" };
+const statusLabel = (s: string) => ({ ok: t("여유 있어요", "Plenty of time"), tight: t("빠듯해요", "Tight"), late: t("일몰 이후 도착", "After sunset"),
+  done: t("코스 끝", "Course done"), unavailable: t("확인 불가", "Unavailable") } as Record<string, string>)[s];
 
 const dist = (m: number | null | undefined) => (m == null ? "" : m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m / 10) * 10}m`);
 
 function Daylight({ d }: { d: Json }) {
   const walking = d.mode === "walking";
   if (d.status === "unavailable") {
-    return <div className="card"><b>일몰 대비 도착</b><p className="note" style={{ margin: "6px 0 0" }}>{d.message}</p></div>;
+    return <div className="card"><b>{t("일몰 대비 도착", "Arrival vs. sunset")}</b><p className="note" style={{ margin: "6px 0 0" }}>{d.message}</p></div>;
   }
   return (
     <div className={`card daylight ${d.status}`}>
-      <div className="row"><b className="grow">일몰 대비 도착</b><span className={`badge st-${d.status}`}>{STATUS_LABEL[d.status] ?? d.status}</span></div>
+      <div className="row"><b className="grow">{t("일몰 대비 도착", "Arrival vs. sunset")}</b><span className={`badge st-${d.status}`}>{statusLabel(d.status) ?? d.status}</span></div>
       <p className="lead">{d.message}</p>
       <div className="stats">
-        <div><span>일몰</span><b>{d.sunset_hhmm}</b></div>
-        <div><span>{walking ? "도착 예상" : "지금 출발 시 도착"}</span><b>{d.eta_hhmm}</b></div>
+        <div><span>{t("일몰", "Sunset")}</span><b>{d.sunset_hhmm}</b></div>
+        <div><span>{walking ? t("도착 예상", "Expected arrival") : t("지금 출발 시 도착", "Arrival if you leave now")}</span><b>{d.eta_hhmm}</b></div>
         {walking
-          ? <div><span>남은 거리</span><b>{d.remaining_km}km</b></div>
-          : <div><span>늦어도 출발</span><b>{d.latest_start_hhmm}</b></div>}
+          ? <div><span>{t("남은 거리", "Distance left")}</span><b>{d.remaining_km}km</b></div>
+          : <div><span>{t("늦어도 출발", "Leave by")}</span><b>{d.latest_start_hhmm}</b></div>}
       </div>
     </div>
   );
@@ -30,11 +32,11 @@ function Daylight({ d }: { d: Json }) {
 
 function Supplies({ s }: { s: Json }) {
   if (s.status !== "ok") {
-    return <div className="card"><b>앞쪽 화장실·식당·쉼터</b><p className="note" style={{ margin: "6px 0 0" }}>{s.message}</p></div>;
+    return <div className="card"><b>{t("앞쪽 화장실·식당·쉼터", "Toilets, food & rest ahead")}</b><p className="note" style={{ margin: "6px 0 0" }}>{s.message}</p></div>;
   }
   return (
     <div className="card">
-      <b>{s.basis === "along_route" ? "앞쪽 화장실·식당·쉼터" : "내 주변 화장실·식당·쉼터"}</b>
+      <b>{s.basis === "along_route" ? t("앞쪽 화장실·식당·쉼터", "Toilets, food & rest ahead") : t("내 주변 화장실·식당·쉼터", "Toilets, food & rest around you")}</b>
       <p className="note" style={{ margin: "2px 0 6px" }}>{s.scope}</p>
       {s.groups.map((g: Json) => (
         <div key={g.category} className="supply">
@@ -42,7 +44,7 @@ function Supplies({ s }: { s: Json }) {
           {g.places.length === 0 && <p className="none">{g.message}</p>}
           {g.places.map((p: Json) => (
             <div key={p.name + p.distance_m} className="place">
-              <span className="where">{p.ahead_m != null ? `앞 ${dist(p.ahead_m)}` : dist(p.distance_m)}</span>
+              <span className="where">{p.ahead_m != null ? t(`앞 ${dist(p.ahead_m)}`, `${dist(p.ahead_m)} ahead`) : dist(p.distance_m)}</span>
               <span className="grow"><b>{p.name}</b></span>
             </div>
           ))}
@@ -52,12 +54,11 @@ function Supplies({ s }: { s: Json }) {
   );
 }
 
-const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-/** '2026-11-16T14:00:00+09:00' → '11/16(월)'. Read off the KST date in the string, not the device clock's zone. */
+/** '2026-11-16T14:00:00+09:00' → '11/16(월)' / 'Mon 11/16'. Read off the KST date in the string, not the device clock's zone. */
 function dayLabel(iso: string, long = false) {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  const wd = WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return long ? `${m}월 ${d}일 (${wd})` : `${m}/${d}(${wd})`;
+  const wdi = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return long ? longDate(m, d, wdi) : t(`${m}/${d}(${weekday(wdi)})`, `${weekday(wdi)} ${m}/${d}`);
 }
 
 /** Consecutive runs of hours on the same date: [{day: '2026-11-16T…', from: 0, count: 5}, …] */
@@ -73,14 +74,14 @@ function days(hours: Json[]) {
 
 function Weather({ w }: { w: Json }) {
   if (w.status !== "ok") {
-    return <div className="card"><b>하루 날씨</b><p className="note" style={{ margin: "6px 0 0" }}>{w.message}</p></div>;
+    return <div className="card"><b>{t("하루 날씨", "Weather today")}</b><p className="note" style={{ margin: "6px 0 0" }}>{w.message}</p></div>;
   }
   const hours: Json[] = w.hours;
   const first = hours[0]?.time, last = hours[hours.length - 1]?.time;
   const span = first ? (first.slice(0, 10) === last?.slice(0, 10) ? dayLabel(first, true) : `${dayLabel(first, true)} ~ ${dayLabel(last, true)}`) : "";
   return (
     <div className="card">
-      <div className="row"><b className="grow">하루 날씨</b>{span && <span className="note" style={{ margin: 0 }}>{span}</span>}</div>
+      <div className="row"><b className="grow">{t("하루 날씨", "Weather today")}</b>{span && <span className="note" style={{ margin: 0 }}>{span}</span>}</div>
       <p className="lead">{w.headline}</p>
       <div className="hours" role="list">
         {/* one bar per date, as wide as that date's hours */}
@@ -92,7 +93,7 @@ function Weather({ w }: { w: Json }) {
         {hours.map((h: Json, i: number) => (
           <div key={h.time} role="listitem" aria-label={`${dayLabel(h.time, true)} ${h.time.slice(11, 16)}`}
                className={`hour ${Number(h.precip_prob_pct) >= 60 ? "wet" : ""}`} style={{ gridRow: 2, gridColumn: i + 1 }}>
-            <span>{h.time.slice(11, 16)}</span><b>{h.temp_c}°</b><span>{h.sky}</span><span>비 {h.precip_prob_pct}%</span><span>{h.wind_ms}m/s</span>
+            <span>{h.time.slice(11, 16)}</span><b>{h.temp_c}°</b><span>{h.sky}</span><span>{t("비", "Rain")} {h.precip_prob_pct}%</span><span>{h.wind_ms}m/s</span>
           </div>
         ))}
       </div>
@@ -102,18 +103,18 @@ function Weather({ w }: { w: Json }) {
 
 function Notices({ n }: { n: Json }) {
   if (n.status !== "ok") {
-    return <div className="card"><b>공지</b><p className="note" style={{ margin: "6px 0 0" }}>{n.message}</p></div>;
+    return <div className="card"><b>{t("공지", "Notices")}</b><p className="note" style={{ margin: "6px 0 0" }}>{n.message}</p></div>;
   }
   return (
     <div className="card">
-      <b>공지</b>
-      {n.notices.length === 0 && <p className="note" style={{ margin: "6px 0 0" }}>확인된 우회·통제 공지가 없어요.</p>}
+      <b>{t("공지", "Notices")}</b>
+      {n.notices.length === 0 && <p className="note" style={{ margin: "6px 0 0" }}>{t("확인된 우회·통제 공지가 없어요.", "No known detours or closures.")}</p>}
       {n.notices.map((x: Json) => (
         <div key={x.id} className="place">
           <span className="grow"><b>{x.title}</b>{x.body && <i>{String(x.body).slice(0, 80)}</i>}</span>
         </div>
       ))}
-      {n.official_url && <a href={n.official_url} target="_blank" rel="noopener" style={{ fontSize: 12 }}>공식 공지 확인</a>}
+      {n.official_url && <a href={n.official_url} target="_blank" rel="noopener" style={{ fontSize: 12 }}>{t("공식 공지 확인", "Check official notices")}</a>}
     </div>
   );
 }
@@ -129,10 +130,11 @@ const alertIconFor = (t: string) => (t === "waypoint_arrival" || t === "endpoint
 
 function ago(iso: string) {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
+  return m < 1 ? t("방금", "just now") : m < 60 ? t(`${m}분 전`, `${m} min ago`)
+    : m < 1440 ? t(`${Math.round(m / 60)}시간 전`, `${Math.round(m / 60)} h ago`) : t(`${Math.round(m / 1440)}일 전`, `${Math.round(m / 1440)} d ago`);
 }
 
-/** 알림 종류(event_type)마다 가장 최신 1개만 남긴다. 지난 알림은 화면에서 계속 빼고, 서버 기록은 그대로 둔다. */
+/** Keep only the newest alert of each kind (event_type). Older ones leave the screen; the server keeps them. */
 function latestPerType(items: Json[]): Json[] {
   const newest = new Map<string, Json>();
   for (const n of items) {
@@ -146,15 +148,15 @@ function Alerts({ items: all }: { items: Json[] }) {
   const items = latestPerType(all);
   return (
     <>
-      <h2 className="sec">최근 알림</h2>
-      {items.length === 0 && <p className="note">아직 알림이 없어요. 걷기를 시작하면 일정·공지 알림이 여기에 모여요.</p>}
+      <h2 className="sec">{t("최근 알림", "Recent alerts")}</h2>
+      {items.length === 0 && <p className="note">{t("아직 알림이 없어요. 걷기를 시작하면 일정·공지 알림이 여기에 모여요.", "No alerts yet. Once you start walking, schedule and notice alerts gather here.")}</p>}
       {items.map((n) => (
         <div key={n.id} className="card alert">
           <div className={`ic ${n.severity === "safety" ? "safety" : ""}`}><svg viewBox="0 0 24 24" dangerouslySetInnerHTML={{ __html: ALERT_ICON[alertIconFor(n.event_type)] }} /></div>
           <div className="grow">
             <b>{n.title}</b>
             <p>{n.message}</p>
-            <span className={`badge ${n.severity === "safety" ? "safety" : "gray"}`}>{ago(n.created_at)}{n.severity === "safety" ? " · 안전" : ""}</span>
+            <span className={`badge ${n.severity === "safety" ? "safety" : "gray"}`}>{ago(n.created_at)}{n.severity === "safety" ? t(" · 안전", " · safety") : ""}</span>
           </div>
         </div>
       ))}
@@ -196,32 +198,35 @@ export default function Brief() {
   const ageMin = data?.generated_at ? Math.round((Date.now() - new Date(data.generated_at).getTime()) / 60000) : 0;
   const fromStart = data?.location?.source === "route_start";
   return (
-    <section aria-label="앞길브리핑">
+    <section aria-label={t("앞길브리핑", "Trail brief")}>
       <PageHead
-        title="앞길 브리핑"
+        title={t("앞길 브리핑", "Trail brief")}
         sub={<>
-          {data?.route ? `${data.route.name} · ${data.mode === "walking" ? "걷는 중" : "출발 전"}` : "지금 걸어도 되는지, 앞에 뭐가 있는지 한눈에"}
-          {at && ` · ${at} 기준`}
+          {data?.route ? `${data.route.name} · ${data.mode === "walking" ? t("걷는 중", "walking") : t("출발 전", "before you start")}`
+            : t("지금 걸어도 되는지, 앞에 뭐가 있는지 한눈에", "Is now a good time to walk, and what's ahead — at a glance")}
+          {at && t(` · ${at} 기준`, ` · as of ${at}`)}
         </>}
       />
 
       {err && <p className="err">{err}</p>}
       {data && ageMin >= 10 && (
-        <p className="note"><span className="badge warn">{ageMin}분 전 정보</span> 연결이 끊겼거나 새로 확인하지 못했어요. 시각이 지났으니 도착·일몰 여유는 다시 확인해 주세요.</p>
+        <p className="note"><span className="badge warn">{t(`${ageMin}분 전 정보`, `${ageMin} min old`)}</span> {t("연결이 끊겼거나 새로 확인하지 못했어요. 시각이 지났으니 도착·일몰 여유는 다시 확인해 주세요.",
+          "The connection dropped or this couldn't be refreshed. Time has passed, so re-check your arrival and sunset margin.")}</p>
       )}
       {data && data.mode === "none" && (
         <div className="card">
-          <b>코스를 먼저 골라 주세요</b>
-          <p className="note" style={{ margin: "6px 0 10px" }}>코스를 고르면 일몰 여유와 앞길 정보를 보여 드려요.</p>
-          <button className="btn sm" onClick={() => go("explore")}>코스탐색 열기</button>
+          <b>{t("코스를 먼저 골라 주세요", "Pick a course first")}</b>
+          <p className="note" style={{ margin: "6px 0 10px" }}>{t("코스를 고르면 일몰 여유와 앞길 정보를 보여 드려요.", "Once you pick a course, you'll see the sunset margin and what's ahead.")}</p>
+          <button className="btn sm" onClick={() => go("explore")}>{t("코스탐색 열기", "Open Courses")}</button>
         </div>
       )}
       {data && data.mode !== "none" && !hasPos && data.location?.source !== "session" && (
         <div className="card">
           <p className="note" style={{ margin: "0 0 8px" }}>
-            {fromStart ? "내 위치를 몰라 코스 시작점 기준으로 보여 드려요." : "내 위치를 켜면 지금 있는 곳 기준으로 보여 드려요."}
+            {fromStart ? t("내 위치를 몰라 코스 시작점 기준으로 보여 드려요.", "Your location is unknown, so this is based on the course start.")
+              : t("내 위치를 켜면 지금 있는 곳 기준으로 보여 드려요.", "Turn on your location to see this for where you are now.")}
           </p>
-          {!locOn && <button className="btn sm" onClick={() => setLocOn(true)}>내 위치 켜기</button>}
+          {!locOn && <button className="btn sm" onClick={() => setLocOn(true)}>{t("내 위치 켜기", "Show my location")}</button>}
         </div>
       )}
       {data && data.mode !== "none" && (
@@ -233,9 +238,9 @@ export default function Brief() {
         </>
       )}
       <Alerts items={notifications} />
-      {!data && !err && <p className="note">불러오는 중…</p>}
+      {!data && !err && <p className="note">{t("불러오는 중…", "Loading…")}</p>}
 
-      <button className="btn ghost" onClick={load} disabled={busy} style={{ marginTop: 6 }}>{busy ? "확인하는 중…" : "다시 확인"}</button>
+      <button className="btn ghost" onClick={load} disabled={busy} style={{ marginTop: 6 }}>{busy ? t("확인하는 중…", "Checking…") : t("다시 확인", "Check again")}</button>
     </section>
   );
 }

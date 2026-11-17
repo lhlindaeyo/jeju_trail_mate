@@ -2,12 +2,14 @@
 no scraping. Every response carries source + freshness so the UI can show
 '최신 확인 필요' badges."""
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..i18n import route_name, t, trail_label
 from ..models import DataSource, RouteNotice, RouteWaypoint, TrailRoute
 
 OFFICIAL_TRAIL_URL = "https://www.jejuolle.org/trail#/"
@@ -90,12 +92,13 @@ def route_to_dict(route: TrailRoute, *, with_path: bool = False) -> dict:
     out = {
         "id": route.id,
         "trail_type": route.trail_type,
-        "trail_label": meta.get("label", route.trail_type),
+        "trail_label": trail_label(route.trail_type) if meta else route.trail_type,
         "operator": route.operator,
-        "type_notice": meta.get("notice"),
+        "type_notice": t(meta["notice"], "A city trail run by Seogwipo City, separate from the official Jeju Olle courses.")
+        if meta.get("notice") else None,
         "course_no": route.course_no,
         "official_code": route.course_no,
-        "name": route.name,
+        "name": route_name(route),
         "subtitle": (route.tags or [None])[0],
         "start_point": route.start_point,
         "end_point": route.end_point,
@@ -115,9 +118,11 @@ def route_to_dict(route: TrailRoute, *, with_path: bool = False) -> dict:
         geo_src = route.segments[0].source_id if route.segments else route.source_id
         out["geometry_source"] = geo_src
         if geo_src == "olle_osm":  # ODbL: the drawn line must carry the attribution
-            out["geometry_attribution"] = "경로선 © OpenStreetMap contributors (ODbL) · 공식 경로와 다를 수 있음"
+            out["geometry_attribution"] = t("경로선 © OpenStreetMap contributors (ODbL) · 공식 경로와 다를 수 있음",
+                                            "Route line © OpenStreetMap contributors (ODbL) · may differ from the official route")
         elif geo_src == "olle_map_traced":
-            out["geometry_attribution"] = "공식 안내지도를 따라 추정한 경로 · 보행로 © OpenStreetMap contributors · 실제 표시를 우선하세요"
+            out["geometry_attribution"] = t("공식 안내지도를 따라 추정한 경로 · 보행로 © OpenStreetMap contributors · 실제 표시를 우선하세요",
+                                            "Traced from the official guide map · paths © OpenStreetMap contributors · trail markers come first")
     return out
 
 
@@ -149,7 +154,10 @@ def find_route(db: Session, route_ref: str, trail_type: str | None = None) -> Tr
         trail_type, ref = ref.split(":", 1)
     if "하영" in ref:
         trail_type = "hayoung_olle"
+    if "hayoung" in ref.lower():
+        trail_type = "hayoung_olle"
     code = ref.replace("하영올레", "").replace("제주올레", "").replace("올레", "").replace("코스", "").strip()
+    code = re.sub(r"(?i)\b(hayoung|jeju|olle|route|course|trail|no\.?)\b", "", code).strip(" #")
     stmt = select(TrailRoute).where(TrailRoute.course_no == code,
                                     TrailRoute.trail_type == (trail_type or "jeju_olle"))
     return db.scalar(stmt)
@@ -186,11 +194,13 @@ def notices_payload(db: Session, route: TrailRoute) -> dict:
         for n in active_notices(db, route)
     ]
     caveat = None
-    where = "제주올레 공식 사이트" if route.trail_type == "jeju_olle" else "서귀포시 공지"
+    jeju = route.trail_type == "jeju_olle"
     if fresh["notices_status"] != "checked":
-        caveat = f"최근 24시간 내 공지 확인 기록이 없습니다. 출발 전 {where}에서 우회·통제 공지를 직접 확인하세요."
+        caveat = t(f"최근 24시간 내 공지 확인 기록이 없습니다. 출발 전 {'제주올레 공식 사이트' if jeju else '서귀포시 공지'}에서 우회·통제 공지를 직접 확인하세요.",
+                   "Notices haven't been checked in the last 24 hours. Before you set out, check detours and closures on "
+                   + ("the official Jeju Olle site." if jeju else "Seogwipo City's notices."))
     return {
-        "route": route.name,
+        "route": route_name(route),
         "trail_type": route.trail_type,
         "notices": notices,
         "notices_status": fresh["notices_status"],
