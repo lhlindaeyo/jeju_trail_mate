@@ -1,5 +1,7 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { resetAppData } from "../api";
 import { useApp } from "../App";
+import { disableNotifications } from "../notify";
 import Plan from "./Plan";
 import Settings from "./Settings";
 
@@ -24,7 +26,18 @@ function Frame({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export function MenuSheet({ onClose }: { onClose: () => void }) {
-  const { openSheet, simOn, setSimOn, go } = useApp();
+  const { openSheet, simOn, setSimOn, go, toast } = useApp();
+  const [resetting, setResetting] = useState(false);
+  const reset = async () => {
+    if (!confirm("여행·걷기 기록·설정·동의를 모두 지우고 처음 화면부터 다시 시작할까요? 되돌릴 수 없어요.")) return;
+    setResetting(true);
+    try {
+      await disableNotifications();
+      await resetAppData();
+      history.replaceState(null, "", location.pathname + location.search); // back to the home tab
+      location.reload();
+    } catch (e) { setResetting(false); toast((e as Error).message); }
+  };
   return (
     <Frame title="메뉴" onClose={onClose}>
       <div className="menu-list">
@@ -33,6 +46,8 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
         <button aria-pressed={simOn} onClick={() => { setSimOn(!simOn); if (!simOn) { go("home"); onClose(); } }}>
           <div>가상 위치 (시연 모드)<span>제주 밖에서도 코스를 따라 걷는 것처럼 시험해요</span></div>
           <span className={`badge ${simOn ? "yellow" : "gray"}`}>{simOn ? "켜짐" : "꺼짐"}</span></button>
+        <button onClick={reset} disabled={resetting}>
+          <div>처음부터 다시 체험하기<span>모든 기록과 설정을 지우고 소개 화면부터 다시 시작해요</span></div>›</button>
       </div>
     </Frame>
   );

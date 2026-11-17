@@ -10,6 +10,21 @@ function safeSet(k: string, v: string | null) {
   try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* storage unavailable */ }
 }
 
+// Kept when the app is reset to its first launch: the browser's id, and the demo location switch.
+const KEEP_ON_RESET = ["jtm.deviceId", "jtm.sim"];
+
+/** Back to a first launch: erase this user's data on the server (trips, walks, settings, consents), then every
+ *  "jtm." value this browser stored (onboarding done, guide seen, picked course, queued GPS, chat history). */
+export async function resetAppData() {
+  await api("/v1/account/data", { method: "DELETE" });
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      for (const k of Object.keys(store)) if (k.startsWith("jtm.") && !KEEP_ON_RESET.includes(k)) store.removeItem(k);
+    } catch { /* storage unavailable */ }
+  }
+  try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
+}
+
 // Random id for this browser. The server ignores it in single-user mode; on the public demo
 // (PER_DEVICE_USERS) it gives every tester their own user.
 const DEVICE_KEY = "jtm.deviceId";
