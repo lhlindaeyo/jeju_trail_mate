@@ -52,15 +52,9 @@ def _next_revision(db: Session, trip: Trip, day: date) -> int:
 
 
 def _rank_routes(routes: list[TrailRoute], prefs: UserPreferences) -> list[TrailRoute]:
-    interests = set(prefs.interests or [])
+    """Courses whose length is closest to the daily distance target come first."""
     target = prefs.daily_distance_target_km
-
-    def score(r: TrailRoute):
-        text = " ".join(r.tags or []) + (r.name or "")
-        overlap = sum(1 for i in interests if i in text)
-        return (-overlap, abs((r.distance_km or target) - target))
-
-    return sorted(routes, key=score)
+    return sorted(routes, key=lambda r: abs((r.distance_km or target) - target))
 
 
 def _limit_min(prefs: UserPreferences, day: date) -> int:

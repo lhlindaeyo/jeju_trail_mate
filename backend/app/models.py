@@ -39,12 +39,10 @@ class UserPreferences(Base):
     walk_start_time: Mapped[str] = mapped_column(String(5), default="08:30")
     walk_end_time: Mapped[str] = mapped_column(String(5), default="17:30")
     rest_every_minutes: Mapped[int] = mapped_column(Integer, default=90)
-    interests: Mapped[list] = mapped_column(JSON, default=list)  # e.g. ["바다", "카페", "문화"]
     notification_settings: Mapped[dict] = mapped_column(JSON, default=dict)
     # Separate, revocable consents (spec §13)
     consent_location: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_ai_processing: Mapped[bool] = mapped_column(Boolean, default=False)
-    consent_memory: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="preferences")

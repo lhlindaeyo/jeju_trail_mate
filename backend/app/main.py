@@ -16,13 +16,13 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # What the removed diary/photo and voice features left in databases created before their removal.
-LEGACY_PREFERENCE_COLUMNS = ("consent_photos", "consent_microphone", "journal_style")
+LEGACY_PREFERENCE_COLUMNS = ("consent_photos", "consent_microphone", "journal_style", "interests", "consent_memory")
 LEGACY_TABLES = ("journal_entries", "journey_books", "media_assets")
 
 
 def drop_removed_feature_leftovers(bind=engine) -> None:
-    """`consent_photos` / `consent_microphone` are NOT NULL without a default, so on an old database a new profile
-    could not even be inserted: drop those columns. The old diary tables are dropped only when empty — one that
+    """Columns the app no longer has but that are NOT NULL without a default (`consent_photos`, `consent_microphone`,
+    `interests`, `consent_memory`): on an old database a new profile could not even be inserted, so drop them. The old diary tables are dropped only when empty — one that
     still holds rows is left alone (and logged) rather than deleting someone's entries."""
     insp = inspect(bind)
     cols = {c["name"] for c in insp.get_columns("user_preferences")}

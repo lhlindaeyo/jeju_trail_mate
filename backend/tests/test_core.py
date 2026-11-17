@@ -23,7 +23,7 @@ def test_routes_marked_unverified(client):
     data = client.get("/v1/routes").json()
     assert data["routes"], "seed routes loaded"
     assert all(r["freshness"]["data_status"] == "needs_check" for r in data["routes"])
-    notices = client.get("/v1/routes/10/notices").json()
+    notices = client.get("/v1/brief", params={"route_id": route_id(client, "10")}).json()["notices"]
     assert notices["notices_status"] == "needs_check" and notices["caveat"]
 
 

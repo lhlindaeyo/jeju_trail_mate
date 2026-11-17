@@ -34,7 +34,6 @@ def build_context(ctx: ToolContext) -> dict:
             "pace_kmh": p.pace_kmh,
             "walk_end_time": p.walk_end_time,
             "rest_every_minutes": p.rest_every_minutes,
-            **({"interests": p.interests} if p.consent_memory else {}),
         },
         "location_sharing": bool(p.consent_location),
         "current_location_known": ctx._location() is not None,  # the position itself stays out of the prompt

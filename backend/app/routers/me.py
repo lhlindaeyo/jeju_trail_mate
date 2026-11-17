@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import current_user
@@ -18,16 +18,9 @@ class PreferencesIn(BaseModel):
     walk_start_time: str | None = Field(default=None, pattern=HHMM)
     walk_end_time: str | None = Field(default=None, pattern=HHMM)
     rest_every_minutes: int | None = Field(default=None, ge=0, le=300)
-    interests: list[str] | None = Field(default=None, max_length=20)
     notification_settings: dict | None = None
     consent_location: bool | None = None
     consent_ai_processing: bool | None = None
-    consent_memory: bool | None = None
-
-    @field_validator("interests")
-    @classmethod
-    def _short(cls, v):
-        return [s[:20] for s in v] if v else v
 
 
 def prefs_to_dict(user: User) -> dict:
@@ -36,11 +29,11 @@ def prefs_to_dict(user: User) -> dict:
         "user_id": user.id, "locale": user.locale,
         "daily_distance_target_km": p.daily_distance_target_km, "pace_kmh": p.pace_kmh,
         "walk_start_time": p.walk_start_time, "walk_end_time": p.walk_end_time,
-        "rest_every_minutes": p.rest_every_minutes, "interests": p.interests or [],
+        "rest_every_minutes": p.rest_every_minutes,
         "notification_settings": p.notification_settings or {},
         "consents": {
             "location": p.consent_location,
-            "ai_processing": p.consent_ai_processing, "memory": p.consent_memory,
+            "ai_processing": p.consent_ai_processing,
         },
     }
 
@@ -59,9 +52,6 @@ def update_preferences(body: PreferencesIn, user: User = Depends(current_user), 
     changes = body.model_dump(exclude_unset=True)
     for k, v in changes.items():
         setattr(p, k, v)
-    if changes.get("consent_memory") is False:
-        # Revoking memory consent erases stored personalization.
-        p.interests = []
     if any(k.startswith("consent_") for k in changes):
         audit(db, user.id, "consent_changed", "user_preferences", user.id)
     db.commit()

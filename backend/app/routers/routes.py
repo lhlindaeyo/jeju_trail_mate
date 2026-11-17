@@ -37,14 +37,6 @@ def get_route(route_id: str, db: Session = Depends(get_db)):
     return route_service.route_to_dict(r, with_path=True)
 
 
-@router.get("/routes/{route_id}/notices")
-def get_notices(route_id: str, db: Session = Depends(get_db)):
-    r = route_service.find_route(db, route_id)
-    if not r:
-        raise not_found()
-    return route_service.notices_payload(db, r)
-
-
 @router.get("/data-sources")
 def data_sources(db: Session = Depends(get_db)):
     """In-app '데이터 출처' screen: provenance, reference dates and terms of every dataset."""

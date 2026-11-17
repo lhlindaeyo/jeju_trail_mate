@@ -17,6 +17,7 @@ def _legacy_db(tmp_path, diary_rows: int = 0):
     with eng.begin() as c:
         c.execute(text("CREATE TABLE user_preferences (user_id VARCHAR(32) PRIMARY KEY, pace_kmh FLOAT NOT NULL, "
                        "journal_style VARCHAR(200), consent_photos BOOLEAN NOT NULL, consent_microphone BOOLEAN NOT NULL, "
+                       "interests JSON NOT NULL, consent_memory BOOLEAN NOT NULL, "
                        "consent_location BOOLEAN NOT NULL)"))
         c.execute(text("CREATE TABLE journal_entries (id INTEGER PRIMARY KEY, body TEXT)"))
         c.execute(text("CREATE TABLE journey_books (id INTEGER PRIMARY KEY)"))

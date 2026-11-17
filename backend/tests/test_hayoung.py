@@ -252,7 +252,7 @@ def test_hayoung_bundles_and_plan(client, auth, hayoung_imported):
 
 
 def test_olle_plan_chains_end_to_start(client, auth):
-    client.patch("/v1/me/preferences", headers=auth, json={"daily_distance_target_km": 25, "walk_end_time": "18:00", "interests": []})
+    client.patch("/v1/me/preferences", headers=auth, json={"daily_distance_target_km": 25, "walk_end_time": "18:00"})
     trip = make_trip(client, auth, "2026-11-10", "2026-11-12")
     drafts = client.post(f"/v1/trips/{trip}/plan", headers=auth, json={}).json()["drafts"]
     routes = [d["route"] for d in drafts if d["route"]]
