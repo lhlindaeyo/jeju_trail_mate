@@ -33,7 +33,7 @@ export default function Onboarding({ onDone }: { onDone: () => Promise<void> }) 
       {step === "prefs" && (
         <div>
           <h1 className="title">걷기 스타일 알려주기</h1>
-          <p className="muted">일정 추천과 알림에만 쓰이며 언제든 설정에서 바꾸거나 지울 수 있어요.</p>
+          <p className="muted">일정 추천과 알림에만 쓰이며 언제든 설정에서 바꿀 수 있어요.</p>
           <PrefsForm onSaved={async () => { markOnboarded(); await onDone(); }} submitLabel="저장하고 시작" />
         </div>
       )}

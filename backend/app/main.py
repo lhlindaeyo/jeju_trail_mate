@@ -3,24 +3,41 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, or_, text
 
 from .config import get_settings
 from .db import Base, SessionLocal, engine
 from .routers import brief, me, misc, routes, sessions, trips
 from .services.route_service import seed_routes
 from .services.tour_service import seed_tour_source
+from .services.tracking_service import purge_old_points
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# What the removed diary/photo and voice features left in databases created before their removal.
+LEGACY_PREFERENCE_COLUMNS = ("consent_photos", "consent_microphone", "journal_style")
+LEGACY_TABLES = ("journal_entries", "journey_books", "media_assets")
 
 
-def _drop_removed_photo_consent() -> None:
-    """The diary (photos) feature is gone. On a database created before that, `consent_photos` is NOT NULL
-    with no default, so inserting a new profile would fail; drop the column. Old diary tables are left alone."""
-    cols = {c["name"] for c in inspect(engine).get_columns("user_preferences")}
-    if "consent_photos" in cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE user_preferences DROP COLUMN consent_photos"))
+def drop_removed_feature_leftovers(bind=engine) -> None:
+    """`consent_photos` / `consent_microphone` are NOT NULL without a default, so on an old database a new profile
+    could not even be inserted: drop those columns. The old diary tables are dropped only when empty — one that
+    still holds rows is left alone (and logged) rather than deleting someone's entries."""
+    insp = inspect(bind)
+    cols = {c["name"] for c in insp.get_columns("user_preferences")}
+    tables = set(insp.get_table_names())
+    with bind.begin() as conn:
+        for col in LEGACY_PREFERENCE_COLUMNS:
+            if col in cols:
+                conn.execute(text(f"ALTER TABLE user_preferences DROP COLUMN {col}"))
+        for table in LEGACY_TABLES:
+            if table not in tables:
+                continue
+            if conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar():
+                log.warning("table %s belongs to a removed feature but still has rows — left in place", table)
+            else:
+                conn.execute(text(f"DROP TABLE {table}"))
 
 
 def _drop_removed_feature_alerts() -> None:
@@ -30,10 +47,11 @@ def _drop_removed_feature_alerts() -> None:
     from .rules.engine import EVENT_TYPES, REMOVED_ACTIONS
 
     with SessionLocal() as db:
-        stale = [n for n in db.query(Notification).all()
-                 if n.event_type not in EVENT_TYPES or any(a.get("id") in REMOVED_ACTIONS for a in (n.actions or []))]
+        stale = db.query(Notification).filter(or_(Notification.event_type.notin_(EVENT_TYPES),
+                                                  Notification.event_type == "waypoint_arrival"))
         for n in stale:
-            db.delete(n)
+            if n.event_type not in EVENT_TYPES or any(a.get("id") in REMOVED_ACTIONS for a in (n.actions or [])):
+                db.delete(n)
         db.commit()
 
 
@@ -41,11 +59,12 @@ def _drop_removed_feature_alerts() -> None:
 async def lifespan(app: FastAPI):
     # Dev convenience: create tables & load the seed course set. Use Alembic migrations in production.
     Base.metadata.create_all(engine)
-    _drop_removed_photo_consent()
+    drop_removed_feature_leftovers()
     _drop_removed_feature_alerts()
     with SessionLocal() as db:
         seed_routes(db)
         seed_tour_source(db)
+        purge_old_points(db)  # Settings promises raw positions are deleted 30 days after a walk ends
     yield
 
 

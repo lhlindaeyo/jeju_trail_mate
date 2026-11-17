@@ -83,14 +83,18 @@ def get_weather(lat: float, lon: float, hours: int = 12, *, client: httpx.Client
     }
     c = client or httpx.Client(timeout=8.0)
     errors = []
-    for src in sources:
-        try:
-            items = _fetch(src, params, c)
-            break
-        except RuntimeError as exc:
-            errors.append(f"{src['name']}: {exc}")
-    else:
-        return unavailable("; ".join(errors))
+    try:
+        for src in sources:
+            try:
+                items = _fetch(src, params, c)
+                break
+            except RuntimeError as exc:
+                errors.append(f"{src['name']}: {exc}")
+        else:
+            return unavailable("; ".join(errors))
+    finally:
+        if client is None:
+            c.close()  # a client made here is not reused, so close it instead of leaking a connection pool per call
 
     by_slot: dict[str, dict] = {}
     for it in items:

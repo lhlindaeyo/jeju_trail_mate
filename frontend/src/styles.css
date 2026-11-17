@@ -130,9 +130,6 @@ h2.sec { font-size: 15px; margin: 22px 2px 10px; }
 .btn.ghost { background: #fff; color: var(--teal-ink); box-shadow: var(--shadow-soft); }
 .btn.danger { background: var(--danger); }
 .btn.sm { display: inline-flex; align-items: center; justify-content: center; width: auto; height: 38px; padding: 0 14px; font-size: 13px; }
-.quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
-.quick button { background: #fff; border-radius: 999px; box-shadow: 0 2px 8px rgba(15, 25, 20, .08); padding: 9px 14px; font-size: 13px; font-weight: 700; color: var(--teal-ink); }
-.quick button:disabled { opacity: .5; }
 input[type=text], input[type=email], input[type=number], input[type=date], input[type=time], select, textarea.field {
   width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
 label.field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
@@ -146,7 +143,6 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .help-btn { flex: 0 0 auto; width: 24px; height: 24px; min-height: 0; padding: 0; border-radius: 50%; border: 1.5px solid var(--teal); background: #fff; color: var(--teal); font-size: 13px; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .help-text { margin: 0 0 10px 32px; font-size: 13px; color: var(--muted, #667); }
 .toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--teal); flex: 0 0 auto; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border-radius: 999px; padding: 6px 12px; min-height: 34px; background: #fff; box-shadow: var(--shadow-soft); font-size: 13px; font-weight: 600; }
 .chip.on { background: var(--teal); color: #fff; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -223,7 +219,6 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .day { border-left: 3px solid var(--line); padding-left: 12px; margin: 14px 0; }
 .day.approved { border-left-color: var(--teal); }
 .day.pending { border-left-color: var(--yellow); }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* compatibility helpers used by settings / onboarding */
 .muted { color: var(--muted); }
@@ -232,7 +227,6 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .card h2 { font-size: 15px; margin: 0 0 6px; }
 .brand { font-weight: 800; letter-spacing: .06em; font-size: 13px; color: var(--teal-ink); margin-bottom: 8px; }
 .btn.big { height: 54px; margin-top: 8px; }
-.btn.secondary { background: #fff; color: var(--teal-ink); box-shadow: var(--shadow-soft); }
 .btn + .btn { margin-top: 8px; }
 
 /* ---------- launch splash ---------- */

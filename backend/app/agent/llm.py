@@ -52,8 +52,6 @@ class LLM(Protocol):
     name: str
     external: bool  # True when user data leaves our servers (requires AI-processing consent)
 
-    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str: ...
-
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun: ...
 
 
@@ -91,12 +89,6 @@ class AnthropicLLM:
     @staticmethod
     def _text(resp) -> str:
         return "".join(b.text for b in resp.content if b.type == "text").strip()
-
-    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        resp = self._create(max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}])
-        if resp.stop_reason == "refusal":
-            raise LLMUnavailable("AI가 이 요청을 처리하지 않았습니다.")
-        return self._text(resp)
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
         tool_defs = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools]
@@ -145,7 +137,7 @@ class MockLLM:
     INTENTS = [
         (("이야기", "전설", "유래", "설화"), "get_tour_story", {}),
         (("관광지", "명소", "가볼", "볼거리"), "find_tour_spots", {}),
-        (("날씨", "비", "바람", "예보"), "get_weather", {}),
+        (("날씨", "비가", "비 오", "비 올", "비오", "비올", "비는", "우산", "바람", "예보"), "get_weather", {}),
         (("공지", "우회", "통제", "폐쇄"), "get_route_notices", {}),
         (("브리핑", "앞길", "걸어도", "해 지기", "해지기", "일몰"), "get_trail_brief", {}),
         (("도착", "남은", "언제", "몇 시"), "estimate_arrival", {}),
@@ -160,9 +152,6 @@ class MockLLM:
         (("일정", "계획"), "get_trip_plan", {}),
         (("코스",), "list_routes", {}),
     ]
-
-    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        raise LLMUnavailable("mock provider has no free-text generation")
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
         hit = match_intent(user, {t.name for t in tools})
@@ -352,14 +341,6 @@ class OpenAICompatLLM:
     def _message(data: dict) -> dict:
         return (data.get("choices") or [{}])[0].get("message") or {}
 
-    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        data = self._post({"model": self.model, "max_tokens": max_tokens, "temperature": 0.4,
-                           "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
-        text = _clean_text(self._message(data).get("content"))
-        if not text:
-            raise LLMUnavailable("AI가 빈 응답을 반환했습니다.")
-        return text
-
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
         tool_defs = [{"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}} for t in tools]
         messages: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -430,9 +411,6 @@ class FallbackLLM:
                 log.warning("LLM provider %s unavailable (%s); trying next", m.name, exc)
                 last = exc
         raise last or LLMUnavailable("사용 가능한 AI 제공사가 없습니다.")
-
-    def generate(self, system: str, user: str, max_tokens: int = 4000) -> str:
-        return self._first(lambda m: m.generate(system, user, max_tokens))
 
     def run_tools(self, system: str, user: str, tools: list[ToolSpec], execute: ToolExecutor, max_turns: int = 6) -> AgentRun:
         return self._first(lambda m: m.run_tools(system, user, tools, execute, max_turns))

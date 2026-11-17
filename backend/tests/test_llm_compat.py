@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.agent import llm as llm_mod
-from app.agent.llm import FallbackLLM, LLMUnavailable, MockLLM, OpenAICompatLLM, ToolSpec, is_local_url
+from app.agent.llm import FallbackLLM, LLMUnavailable, MockLLM, OpenAICompatLLM, ToolSpec, is_local_url, match_intent
 from app.config import Settings
 
 TOOLS = [ToolSpec("get_weather", "날씨", {"type": "object", "properties": {}}),
@@ -83,11 +83,16 @@ def test_small_talk_is_not_forced_into_a_tool():
     assert run.text == "안녕하세요!" and seen == []
 
 
+def ask(llm) -> str:
+    """One question, no tools: the model's plain answer text."""
+    return llm.run_tools("s", "u", [], lambda n, a: None).text
+
+
 def test_reasoning_block_is_stripped_and_empty_reply_is_unavailable():
     ok = _llm(lambda req: httpx.Response(200, json=_msg("<think>음…</think>\n정답입니다.")))
-    assert ok.generate("s", "u") == "정답입니다."
+    assert ask(ok) == "정답입니다."
     with pytest.raises(LLMUnavailable):
-        _llm(lambda req: httpx.Response(200, json=_msg("<think>끝나지 않은 생각"))).generate("s", "u")
+        ask(_llm(lambda req: httpx.Response(200, json=_msg("<think>끝나지 않은 생각"))))
 
 
 def test_keys_rotate_on_rate_limit_and_round_robin_on_success():
@@ -99,39 +104,37 @@ def test_keys_rotate_on_rate_limit_and_round_robin_on_success():
         return httpx.Response(429 if key == "k1" else 200, json=_msg("ok"))
 
     llm = _llm(handler, api_key="k1, k2")
-    assert llm.generate("s", "u") == "ok"
+    assert ask(llm) == "ok"
     assert used == ["k1", "k2"]  # k1 rejected -> k2 used
-    llm.generate("s", "u")
+    ask(llm)
     assert used == ["k1", "k2", "k2"]  # k1 rests after a rejection, so it is not retried on every call
 
     both = _llm(lambda req: httpx.Response(200, json=_msg("ok")), api_key="a,b")
     seen = []
     both.client = httpx.Client(transport=httpx.MockTransport(
         lambda req: seen.append(req.headers["authorization"]) or httpx.Response(200, json=_msg("ok"))))
-    both.generate("s", "u"), both.generate("s", "u"), both.generate("s", "u")
+    ask(both), ask(both), ask(both)
     assert seen == ["Bearer a", "Bearer b", "Bearer a"]  # healthy keys share the load
 
 
 def test_all_keys_rejected_or_server_down_is_unavailable():
     with pytest.raises(LLMUnavailable):
-        _llm(lambda req: httpx.Response(429, json={}), api_key="a,b").generate("s", "u")
+        ask(_llm(lambda req: httpx.Response(429, json={}), api_key="a,b"))
     with pytest.raises(LLMUnavailable):
-        _llm(lambda req: httpx.Response(500, text="x")).generate("s", "u")
+        ask(_llm(lambda req: httpx.Response(500, text="x")))
 
     def refuse(req):
         raise httpx.ConnectError("down")
 
     with pytest.raises(LLMUnavailable):
-        _llm(refuse).generate("s", "u")
+        ask(_llm(refuse))
 
 
 class _Down:
     name, external = "down", False
 
-    def generate(self, *a, **k):
+    def run_tools(self, *a, **k):
         raise LLMUnavailable("down")
-
-    run_tools = generate
 
 
 def test_fallback_chain_moves_on_and_reports_external_conservatively():
@@ -139,7 +142,7 @@ def test_fallback_chain_moves_on_and_reports_external_conservatively():
     run = chain.run_tools("s", "[사용자 질문]\n날씨", TOOLS, lambda n, a: {"status": "unavailable", "message": "예보 확인 필요"})
     assert run.provider == "mock" and "예보" in run.text
     with pytest.raises(LLMUnavailable):
-        chain.generate("s", "u")  # mock has no free text either -> last error surfaces
+        FallbackLLM([_Down(), _Down()]).run_tools("s", "u", TOOLS, lambda n, a: None)  # nobody left -> the last error surfaces
     cloud = OpenAICompatLLM("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "m", "k")
     assert FallbackLLM([OpenAICompatLLM("ollama", "http://localhost:11434/v1", "m"), cloud]).external is True
     assert FallbackLLM([OpenAICompatLLM("ollama", "http://localhost:11434/v1", "m"), MockLLM()]).external is False
@@ -166,3 +169,9 @@ def test_chain_is_built_from_settings(monkeypatch):
     assert build(llm_chain="", llm_provider="mock").name == "mock"  # legacy switch still works
     custom = build(llm_chain="openai", openai_base_url="http://localhost:8000/v1", openai_model="m")
     assert custom.name == "openai" and custom.model == "m"
+
+
+def test_dish_names_containing_bi_are_not_taken_for_weather():
+    assert match_intent("[사용자 질문]\n비빔밥 맛집 알려줘", {"get_weather", "find_places_near"})[0] == "find_places_near"
+    assert match_intent("[사용자 질문]\n오늘 비 올까?", {"get_weather"})[0] == "get_weather"
+

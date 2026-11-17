@@ -43,7 +43,6 @@ class UserPreferences(Base):
     notification_settings: Mapped[dict] = mapped_column(JSON, default=dict)
     # Separate, revocable consents (spec §13)
     consent_location: Mapped[bool] = mapped_column(Boolean, default=False)
-    consent_microphone: Mapped[bool] = mapped_column(Boolean, default=False)  # unused: voice questions were removed; kept so existing databases still insert
     consent_ai_processing: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_memory: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

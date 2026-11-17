@@ -10,14 +10,8 @@ function safeSet(k: string, v: string | null) {
   try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* storage unavailable */ }
 }
 
-/** Forget everything stored on this device (used after the user erases their data). */
-export async function clearLocalData() {
-  for (const k of [QUEUE_KEY, "jtm.onboarded", "jtm.courseId", "jtm.tripId"]) safeSet(k, null);
-  try { await caches.delete("jtm-api-v1"); } catch { /* no cache api */ }
-}
-
 // Random id for this browser. The server ignores it in single-user mode; on the public demo
-// (PER_DEVICE_USERS) it gives every tester their own user. Kept when local data is erased.
+// (PER_DEVICE_USERS) it gives every tester their own user.
 const DEVICE_KEY = "jtm.deviceId";
 let deviceId: string | null = null;
 function getDeviceId(): string {
@@ -39,11 +33,10 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-export async function api<T = Json>(path: string, opts: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
+export async function api<T = Json>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { "X-Device-Id": getDeviceId() };
   let body: BodyInit | undefined;
-  if (opts.form) body = opts.form;
-  else if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
+  if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
   let res: Response;
   try {
     res = await fetch(path, { method: opts.method ?? (body ? "POST" : "GET"), headers, body });
@@ -90,5 +83,3 @@ export const fmtDate = (iso: string) => {
   const d = new Date(iso + "T00:00:00");
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
 };
-
-export const todayKst = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);

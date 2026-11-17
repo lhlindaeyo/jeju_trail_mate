@@ -30,10 +30,6 @@ def as_utc(dt: datetime | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def to_kst(dt: datetime) -> datetime:
-    return as_utc(dt).astimezone(KST)
-
-
 def parse_hhmm(value: str) -> time:
     h, m = value.split(":")
     return time(int(h), int(m))

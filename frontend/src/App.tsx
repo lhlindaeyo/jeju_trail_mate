@@ -62,7 +62,7 @@ const GUIDE_KEY = "jtm.guideSeen";
 const tab = (p: Page) => `.nav button[data-tab="${p}"]`;
 // order: settings first, then the bottom tabs from left to right
 const GUIDE_STEPS: GuideStep[] = [
-  { target: 'button.menu[aria-label="메뉴"]', title: "설정 · 메뉴", desc: "일정, 설정, 데이터 출처를 여기서 열어요." },
+  { target: 'button.menu[aria-label="메뉴"]', title: "설정 · 메뉴", desc: "여행 일정, 설정·동의, 가상 위치를 여기서 열어요." },
   { target: tab("home"), title: NAV_LABEL.home, desc: "지도에서 코스를 보고 걷기를 시작·기록해요." },
   { target: tab("explore"), title: NAV_LABEL.explore, desc: "올레길 코스를 둘러보고 고를 수 있어요." },
   { target: tab("ai"), title: NAV_LABEL.ai, desc: "궁금한 걸 묻고, 걷는 중 알림을 받아요." },

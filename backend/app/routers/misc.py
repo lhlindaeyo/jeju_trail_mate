@@ -11,7 +11,7 @@ from ..auth import current_user, require_admin
 from ..db import get_db
 from .. import push
 from ..models import AuditEvent, Notification, PushSubscription, RouteNotice, TrackingSession, Trip, User
-from ..rules.engine import EVENT_TYPES, REMOVED_ACTIONS, notification_to_dict
+from ..rules.engine import notification_to_dict
 from ..services.route_service import find_route, route_to_dict
 from .common import audit, not_found, owned_session, owned_trip
 
@@ -22,13 +22,10 @@ router = APIRouter(prefix="/v1")
 
 @router.get("/notifications", tags=["notifications"])
 def list_notifications(since: datetime | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    # Only kinds the app still makes: a database from an older version holds e.g. 'journal_prompt' ('오늘의 기록')
-    # from the removed diary feature, whose buttons lead nowhere.
-    q = select(Notification).where(Notification.user_id == user.id, Notification.event_type.in_(EVENT_TYPES))
+    q = select(Notification).where(Notification.user_id == user.id)
     if since:
         q = q.where(Notification.created_at > since.astimezone(timezone.utc))
-    items = [n for n in db.scalars(q.order_by(Notification.created_at.desc()).limit(100))
-             if not any(a.get("id") in REMOVED_ACTIONS for a in (n.actions or []))]
+    items = list(db.scalars(q.order_by(Notification.created_at.desc()).limit(100)))
     now = datetime.now(timezone.utc)
     for n in items:
         if n.delivered_at is None:

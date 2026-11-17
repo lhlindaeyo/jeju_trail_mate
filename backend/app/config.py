@@ -48,7 +48,6 @@ class Settings(BaseSettings):
     # External data (all optional — features degrade gracefully when missing)
     kma_apihub_key: str | None = None  # 기상청 API허브 authKey (단기예보; 먼저 시도)
     kma_service_key: str | None = None  # 공공데이터포털 기상청 단기예보 serviceKey
-    jeju_datahub_appkey: str | None = None  # 제주데이터허브 프로젝트키 (공공와이파이 AP OpenAPI)
 
     # Geocoding (import time). GEOCODER_CHAIN is tried in order; results of providers whose terms
     # forbid storing them (VWorld, Kakao by default) are shown as suggestions, never written to the DB.

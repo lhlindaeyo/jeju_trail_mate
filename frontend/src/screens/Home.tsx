@@ -91,6 +91,7 @@ export default function Home() {
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
   const meMarker = useRef<L.Marker | null>(null);
+  const lineCredit = useRef("");
   const [spin, setSpin] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -129,6 +130,10 @@ export default function Home() {
     const m = map.current, g = layer.current;
     if (!m || !g) return;
     g.clearLayers();
+    // the drawn line's own credit (OSM-derived lines are ODbL) joins the map's attribution
+    if (lineCredit.current) m.attributionControl.removeAttribution(lineCredit.current);
+    lineCredit.current = course?.geometry_attribution ?? "";
+    if (lineCredit.current) m.attributionControl.addAttribution(lineCredit.current);
     if (!course) return;
     const path: [number, number][] = course.path ?? [];
     if (path.length > 1) {
@@ -176,8 +181,8 @@ export default function Home() {
     try {
       if (!me.consents.location) {
         if (!confirm("걷는 동안 위치를 기록해 진행률·경유지 도착을 계산해요. 세션을 끝내면 기록을 멈춥니다. 위치 기록에 동의할까요?")) {
-          const r = await api("/v1/sessions", { body: { trip_id: trip.id, route_id: course.id, tracking_mode: "manual" } });
-          setSession(r); pushNotifications(r.notifications); toast("위치 없이 기록을 시작했어요");
+          // A recording without positions has nothing to measure (the app has no screen to type a distance into).
+          toast("위치 기록에 동의해야 걷기를 기록할 수 있어요. 지도와 앞길브리핑은 그대로 쓸 수 있어요");
           return;
         }
         await api("/v1/me/preferences", { method: "PATCH", body: { consent_location: true } });
@@ -248,7 +253,7 @@ export default function Home() {
         </div>
         <div className="name">
           <b>{course?.name ?? "코스 미선택"}</b>
-          <span>{active ? (session.tracking_mode === "manual" ? "수동 기록 중" : `기록 중 · GPS ${session.gps_quality === "poor" ? "약함" : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : "확인 중"}`)
+          <span>{active ? `기록 중 · GPS ${session.gps_quality === "poor" ? "약함" : session.gps_accuracy_m != null ? `±${session.gps_accuracy_m}m` : "확인 중"}`
             : totalM != null ? `전체 ${course!.distance_km.toFixed(1)} km` : course ? "거리 계산 예정" : "—"}</span>
         </div>
         <div className="kv"><b>{active ? fmtKm(shownDoneM) : "0.0"}</b><span>진행 km</span></div>

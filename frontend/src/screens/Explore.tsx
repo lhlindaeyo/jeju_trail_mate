@@ -8,6 +8,7 @@ type TT = "jeju_olle" | "hayoung_olle";
 
 const JEJU: [number, number] = [33.38, 126.55];
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_CREDIT = "© OpenStreetMap contributors";
 const TEAL = "#0f8f9b";
 
 function dur(r: Json) {
@@ -20,14 +21,18 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
+  const credit = useRef<L.Control.Attribution | null>(null);
+  const lineCredit = useRef("");
 
   useEffect(() => {
     if (!el.current || map.current) return;
+    // OSM tiles and OSM-derived course lines must carry their credit; top right, because the course chip covers the bottom
     const m = L.map(el.current, { zoomControl: false, attributionControl: false, scrollWheelZoom: false, dragging: !L.Browser.mobile }).setView(JEJU, 9);
     L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(m);
+    credit.current = L.control.attribution({ position: "topright", prefix: false }).addAttribution(TILE_CREDIT).addTo(m);
     layer.current = L.layerGroup().addTo(m);
     map.current = m;
-    return () => { m.remove(); map.current = null; layer.current = null; };
+    return () => { m.remove(); map.current = null; layer.current = null; credit.current = null; lineCredit.current = ""; };
   }, []);
 
   const path: [number, number][] = route && detail && detail.id === route.id ? detail.path ?? [] : [];
@@ -35,6 +40,9 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
     const m = map.current, g = layer.current;
     if (!m || !g) return;
     g.clearLayers();
+    if (lineCredit.current) credit.current?.removeAttribution(lineCredit.current);
+    lineCredit.current = path.length > 1 ? detail?.geometry_attribution ?? "" : "";
+    if (lineCredit.current) credit.current?.addAttribution(lineCredit.current);
     if (path.length > 1) {
       L.polyline(path, { color: "#fff", weight: 9, opacity: 0.9, lineCap: "round" }).addTo(g);
       L.polyline(path, { color: TEAL, weight: 5, lineCap: "round" }).addTo(g);
@@ -71,7 +79,7 @@ function CourseMap({ route, detail, type }: { route: Json | null; detail: Json |
 }
 
 export default function Explore() {
-  const { setCourseId, go, toast } = useApp();
+  const { setCourseId, go, toast, session } = useApp();
   const [type, setType] = useState<TT>(() => {
     try { return (localStorage.getItem("jtm.exploreType") as TT) || "jeju_olle"; } catch { return "jeju_olle"; }
   });
@@ -80,24 +88,35 @@ export default function Explore() {
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Json | null>(null);
   const detailCache = useRef<Record<string, Json>>({});
+  const selRef = useRef<string | null>(null); // latest pick, so a slow response for an earlier pick cannot replace it
 
   useEffect(() => {
     setErr("");
     setSelId(null);
+    selRef.current = null;
     api(`/v1/routes?trail_type=${type}`).then((r) => setRoutes(r.routes)).catch((e) => setErr(e.message));
     try { localStorage.setItem("jtm.exploreType", type); } catch { /* ignore */ }
   }, [type]);
 
   const select = (r: Json) => {
     setSelId(r.id);
+    selRef.current = r.id;
     if (!r.has_geometry) { setDetail(null); return; }
     const hit = detailCache.current[r.id];
     if (hit) { setDetail(hit); return; }
-    api(`/v1/routes/${r.id}`).then((d) => { detailCache.current[r.id] = d; setDetail(d); }).catch(() => setDetail(null));
+    api(`/v1/routes/${r.id}`).then((d) => {
+      detailCache.current[r.id] = d;
+      if (selRef.current === r.id) setDetail(d);
+    }).catch(() => { if (selRef.current === r.id) setDetail(null); });
   };
   const selected = routes.find((r) => r.id === selId) ?? null;
 
   const pick = (r: Json) => {
+    // while a walk is recording, Home keeps showing that walk's course, so a change here would be silently ignored
+    if (session && session.status !== "ended" && session.route_id && session.route_id !== r.id) {
+      toast("걷는 중에는 코스를 바꿀 수 없어요. 홈에서 걷기를 종료해 주세요");
+      return;
+    }
     setCourseId(r.id);
     go("home");
     toast(`${r.name}로 바꿨어요`);

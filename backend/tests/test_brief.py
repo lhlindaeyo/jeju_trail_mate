@@ -153,7 +153,7 @@ def test_old_diary_and_book_endpoints_are_gone(client, auth):
     assert client.get("/v1/books/x", headers=auth).status_code == 404
 
 
-def test_notifications_hide_kinds_the_app_no_longer_makes(client, auth):
+def test_startup_deletes_alerts_of_removed_features(client, auth):
     from app.models import Notification
 
     client.get("/v1/me", headers=auth)
@@ -167,12 +167,12 @@ def test_notifications_hide_kinds_the_app_no_longer_makes(client, auth):
                     Notification(user_id=uid, event_key="rest-1", event_type="rest_reminder", severity="info",
                                  title="잠시 쉬어 갈까요?", message="쉬어 가요.")])
         db.commit()
+    from app.main import _drop_removed_feature_alerts
+
+    _drop_removed_feature_alerts()  # runs at startup
     got = client.get("/v1/notifications", headers=auth).json()["notifications"]
     assert "rest_reminder" in {n["event_type"] for n in got}
     assert not any(n["event_type"] == "journal_prompt" or "사진" in n["message"] for n in got)
-    from app.main import _drop_removed_feature_alerts
-
-    _drop_removed_feature_alerts()  # startup clean-up deletes them for good
     with SessionLocal() as db:
         assert db.query(Notification).filter(Notification.event_key.in_(["old-journal", "old-photo"])).count() == 0
         assert db.query(Notification).filter(Notification.event_key == "rest-1").count() == 1

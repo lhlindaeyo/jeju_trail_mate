@@ -8,8 +8,6 @@ __pycache__/
 # Local data — never commit
 *.db
 *.db-journal
-storage/
-backend/storage/
 .env
 .env.*
 

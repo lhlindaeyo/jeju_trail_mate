@@ -106,9 +106,6 @@ class _ExternalFake:
     def __init__(self, tool=None, args=None):
         self.tool, self.args = tool, args
 
-    def generate(self, system, user, max_tokens=4000):
-        return "오늘은 바다를 보며 걸었다."
-
     def run_tools(self, system, user, tools, execute, max_turns=6):
         out = execute(self.tool, self.args)
         return AgentRun(text="제안을 만들었어요.", tool_calls=[ToolCall(self.tool, self.args, True, out)], provider=self.name)
