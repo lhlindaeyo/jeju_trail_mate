@@ -6,6 +6,7 @@
 - 기획·개발 명세서 v1.0: [docs/development_spec.html](docs/development_spec.html)
 - **개발계획 v1.2**(하영올레 편입, 제주데이터허브 데이터, UI·디자인 명세)가 현재 기준입니다. 요약은 아래 "v1.2 반영 내용"을 보세요.
 - 직접 해야 할 일: [docs/OWNER_TODO.md](docs/OWNER_TODO.md) · 원본 데이터 두는 곳: [data/raw/README.md](data/raw/README.md)
+- 서버에 올려 폰에서 쓰기: [docs/DEPLOY.md](docs/DEPLOY.md) (`docker-compose.prod.yml`)
 
 > JEJU TRAIL MATE는 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아닙니다. 이 앱은 구조·구급 서비스가 아닙니다.
 

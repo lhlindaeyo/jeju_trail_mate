@@ -1,0 +1,56 @@
+# 서버 배포용(AI는 Gemini 같은 클라우드 API를 쓰므로 Ollama·GPU가 필요 없습니다).
+# 센터 PC용 로컬 LLM 구성은 docker-compose.yml 입니다.
+#
+#   web      Caddy: 프런트(dist) 서빙 + /v1·/health 를 backend 로 전달 + (도메인이 있으면) HTTPS 자동
+#   backend  FastAPI (SQLite 파일은 ./server_data 에 보관)
+#   tunnel   (선택) 도메인이 없을 때 임시 https 주소를 받는 Cloudflare 터널. --profile tunnel 로만 켜짐
+#
+# 사용법은 docs/DEPLOY.md. 이 파일은 작성 환경에 Docker가 없어 실행해 보지 못했습니다 — 서버에서 한 번 시험하세요.
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env   # 서버에서 deploy/backend.env.example 을 복사해 키를 채움(git에는 없음)
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////data/jeju_trail_mate.db
+      PER_DEVICE_USERS: "1"   # 로그인이 없으므로 브라우저(기기)마다 따로 사용자를 만듦
+      TOUR_API_DIR: /raw/tour_api
+    volumes:
+      - ./server_data:/data
+      - ./data/raw/tour_api:/raw/tour_api:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data     # 받은 인증서 보관(지우면 재발급 한도에 걸릴 수 있음)
+      - caddy_config:/config
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://web:80
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:

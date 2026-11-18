@@ -35,3 +35,6 @@ data/raw/olle_osm/*
 !data/raw/tour_api/
 data/raw/tour_api/*
 !data/raw/tour_api/kto_spots.json
+
+# Server deployment: SQLite file kept next to docker-compose.prod.yml
+server_data/
