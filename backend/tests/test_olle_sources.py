@@ -178,7 +178,7 @@ def test_traced_import_loads_checked_routes(client, course99):
             r = _route99(db)
             assert r.has_geometry and r.segments[0].source_id == "olle_map_traced"
             detail = client.get(f"/v1/routes/{r.id}").json()
-            assert "추정" in detail["geometry_attribution"]
+            assert "OpenStreetMap" in detail["geometry_attribution"]
             # a sketch that does not fit the official distance is rejected
             r.distance_km = 4.0
             db.commit()

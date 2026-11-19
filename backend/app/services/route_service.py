@@ -118,11 +118,11 @@ def route_to_dict(route: TrailRoute, *, with_path: bool = False) -> dict:
         geo_src = route.segments[0].source_id if route.segments else route.source_id
         out["geometry_source"] = geo_src
         if geo_src == "olle_osm":  # ODbL: the drawn line must carry the attribution
-            out["geometry_attribution"] = t("경로선 © OpenStreetMap contributors (ODbL) · 공식 경로와 다를 수 있음",
-                                            "Route line © OpenStreetMap contributors (ODbL) · may differ from the official route")
-        elif geo_src == "olle_map_traced":
-            out["geometry_attribution"] = t("공식 안내지도를 따라 추정한 경로 · 보행로 © OpenStreetMap contributors · 실제 표시를 우선하세요",
-                                            "Traced from the official guide map · paths © OpenStreetMap contributors · trail markers come first")
+            out["geometry_attribution"] = t("경로선 © OpenStreetMap contributors (ODbL)",
+                                            "Route line © OpenStreetMap contributors (ODbL)")
+        elif geo_src == "olle_map_traced":  # the traced line is built on OSM paths, so it keeps the same credit
+            out["geometry_attribution"] = t("보행로 © OpenStreetMap contributors (ODbL)",
+                                            "Paths © OpenStreetMap contributors (ODbL)")
     return out
 
 
