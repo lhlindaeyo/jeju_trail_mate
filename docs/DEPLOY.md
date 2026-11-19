@@ -37,7 +37,7 @@ cp deploy/backend.env.example backend/.env
 scp backend/jeju_trail_mate.db <서버>:<저장소>/server_data/jeju_trail_mate.db   # 서버에 server_data/ 폴더를 먼저 만들어 둡니다
 ```
 
-- 이 DB에는 **내 PC에서 쓰던 여행·걷기 기록(GPS 점 포함)**도 들어 있습니다. 서버는 기기마다 따로 사용자를 만들어서(`PER_DEVICE_USERS=1`) 그 기록이 다른 사람에게 보이진 않지만, 파일 자체는 서버에 올라갑니다. 신경 쓰이면 데이터 적재 명령(README의 "데이터 적재")을 서버에서 새로 돌려 만드세요.
+- 이 DB에는 **내 PC에서 쓰던 여행·걷기 기록(GPS 점 포함)**도 들어 있습니다. 서버는 기기마다 따로 사용자를 만들어서(`PER_DEVICE_USERS=1`) 그 기록이 다른 사람에게 보이진 않지만, 파일 자체는 서버에 올라갑니다. 신경 쓰이면 데이터 적재 명령(README "4. 실행 방법"의 ③)을 서버에서 새로 돌려 만드세요.
 - DB를 안 올리고 시작하면 시드 데이터만 있는 빈 DB가 생기고, 하영올레 경로선 같은 적재 데이터는 없습니다.
 - 백업은 `server_data/jeju_trail_mate.db` 파일 하나를 복사하면 됩니다.
 
@@ -78,7 +78,7 @@ docker compose -f docker-compose.prod.yml logs -f backend  # 로그
 
 - 프런트를 새로 배포해도 폰이 옛 화면을 붙들고 있으면, 앱을 완전히 닫았다 열거나 새로고침하세요(서비스워커).
 - `/docs`(API 문서)는 운영 모드에서 꺼집니다.
-- SQLite 단일 파일이라 백엔드는 프로세스 하나로 돌립니다. 동시 사용자가 많아지면 PostgreSQL이 필요합니다(`DATABASE_URL`, README의 마이그레이션 주의 참고).
+- SQLite 단일 파일이라 백엔드는 프로세스 하나로 돌립니다. 동시 사용자가 많아지면 PostgreSQL이 필요합니다(`DATABASE_URL`). 운영 DB의 구조가 바뀌면 마이그레이션(Alembic)이 필요한데, 아직 준비돼 있지 않습니다.
 
 ## 알려진 한계
 

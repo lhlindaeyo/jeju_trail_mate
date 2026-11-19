@@ -1,123 +1,175 @@
 # JEJU TRAIL MATE
 
-제주의 길을 걷는 개별 여행자를 위한 개인화 AI 트레킹 에이전트.
-**계획(PLAN) → 걷기(WALK) → 앞길 브리핑(AHEAD)** 에 집중합니다. 일기·사진·디지털 책 기능은 없앴고, 걷는 동안 필요한 판단(일몰 전 도착, 앞쪽 쉴 곳, 날씨)을 한 화면에 보여 줍니다.
+제주의 길을 걷는 개별 여행자를 위한 AI 트레킹 에이전트. **계획 → 걷기 → 앞길 브리핑**에 집중합니다.
 
-- 기획·개발 명세서 v1.0: [docs/development_spec.html](docs/development_spec.html)
-- **개발계획 v1.2**(하영올레 편입, 제주데이터허브 데이터, UI·디자인 명세)가 현재 기준입니다. 요약은 아래 "v1.2 반영 내용"을 보세요.
-- 직접 해야 할 일: [docs/OWNER_TODO.md](docs/OWNER_TODO.md) · 원본 데이터 두는 곳: [data/raw/README.md](data/raw/README.md)
-- 서버에 올려 폰에서 쓰기: [docs/DEPLOY.md](docs/DEPLOY.md) (`docker-compose.prod.yml`)
+> 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아니며, 구조·구급 서비스도 아닙니다.
 
-> JEJU TRAIL MATE는 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아닙니다. 이 앱은 구조·구급 서비스가 아닙니다.
+## 1. 에이전트 아키텍처
 
-## v1.2 반영 내용
+```
+폰(PWA) ── /v1/agent/chat ──> Orchestrator ──> LLM 체인 ──> 도구 호출 ──> 서비스·DB
+                                  │                              │
+                                  └── 검증된 결과 + 출처 ◄───────┘
+폰 ── GPS 점 ──> 규칙 엔진(LLM 없음) ──> 알림
+```
 
-| 항목 | 구현 |
+| 구성 | 위치 | 역할 |
+|---|---|---|
+| Orchestrator | `backend/app/agent/orchestrator.py` | 채팅 한 턴을 처리: 응급 문구 감지 → AI 처리 동의 확인 → 최소 컨텍스트 생성 → LLM 호출 → 답변·출처·승인 제안 반환 |
+| LLM 체인 | `backend/app/agent/llm.py` | 제공사를 `LLM_CHAIN`에 적은 순서대로 시도하고, 장애·한도면 다음으로 넘어감 |
+| 도구 | `backend/app/agent/tools.py` | 모델이 호출하는 13개 기능(아래 표). 요청한 사용자의 권한으로만 실행 |
+| 시스템 프롬프트 | `backend/app/agent/prompts.py` | 도구 결과로 확인된 사실만 답하고, 한두 문장으로 결론부터 말하게 함 |
+| 규칙 엔진 | `backend/app/rules/engine.py` | GPS 점이 들어올 때마다 규칙으로 알림을 만듦. 매번 LLM을 부르지 않음 |
+
+**LLM 제공사** — `LLM_CHAIN`에 쉼표로 적습니다(예: `gemini,openrouter,mock`).
+
+| 이름 | 실행 위치 | 특징 |
+|---|---|---|
+| `ollama` | 백엔드 서버(같은 PC·사설망) | 대화가 서버 밖으로 나가지 않고 비용 없음. 기본 모델 `qwen3:4b` |
+| `gemini`, `groq`, `openrouter`, `anthropic`, `openai`(OpenAI 호환 주소) | 외부 | 대화가 외부 서버로 전송됨 |
+| `mock` | 백엔드 서버 | AI 없이 키워드로 도구를 호출해 결과만 답함. 다른 모델이 모두 안 될 때, 또는 설정된 모델이 없을 때 사용 |
+
+- **동의 규칙**: 체인에 외부 제공사가 하나라도 있으면, 사용자가 설정에서 'AI 처리 동의'를 켠 경우에만 AI 대화를 실행합니다. 꺼져 있으면 Ollama를 포함해 어떤 모델도 호출하지 않고 안내만 표시합니다. 동의 없이 서버 안에서만 처리하려면 `LLM_CHAIN=ollama,mock`처럼 외부 제공사를 빼세요.
+- **도구 호출 보완**: OpenAI 호환 모델이 도구를 부르지 않고 답하려 하면, 질문의 키워드를 보고 해당 도구를 대신 호출한 뒤 결과를 모델이 문장으로 정리하게 합니다. 키워드는 글자 포함 여부로 확인하므로 "비" 한 글자가 아니라 "비가", "비 올", "우산"처럼 여러 글자 표현만 등록해, "비빔밥"이 날씨 질문으로 처리되지 않습니다.
+- **승인 구조**: 일정 변경은 에이전트가 직접 하지 않고 '제안'만 만듭니다. 사용자가 화면에서 승인해야 반영됩니다.
+- **응급**: "살려줘", "119", "다쳤어" 같은 문구가 있으면 LLM을 거치지 않고 119·112 안내를 바로 돌려줍니다.
+- **개인정보**: 모델에는 코스·일정·진행 요약만 보냅니다. 원시 GPS 기록은 보내지 않고, 위치 기록은 세션 종료 30일 뒤 삭제됩니다.
+
+**규칙 엔진 알림**: 경유지 도착, 경로 이탈(50m 넘게 2분 이상), 종점 근처(150m), 일정 지연, 휴식 제안, 일몰 전 종료 위험, 공식 공지, 공지 최신 확인 필요, 비 예보(강수확률 60% 이상).
+
+## 2. 에이전트 호출 도구
+
+| 도구 | 하는 일 |
 |---|---|
-| 트레일 2유형 | `jeju_olle`(사단법인 제주올레, 27코스, 경로 좌표 없음) / `hayoung_olle`(서귀포시, 1·2·3코스, SHP 경로·경유지). 화면·AI 답변에서 항상 구분하고, 하영올레는 제주올레 완주에 합산하지 않습니다. |
-| 데이터 레지스트리 | `data_sources` 테이블: 출처·기준일·이용 조건·파일 해시. 출처 목록은 `GET /v1/data-sources`로 읽습니다(앱 화면은 없음). 지도에는 OpenStreetMap 타일·경로선의 출처 표기가 붙습니다. |
-| 데이터 파이프라인 | `python -m app.data_import` — 올레코스현황 CSV, 하영올레 SHP(6개 파일 검증 → `.prj` 좌표계 → WGS84 변환 → 경로·경유지 적재), 휴게음식점 CSV(폐업 제외, 좌표 없으면 거리 추천 제외). |
-| DB | `trail_routes`(trail_type, operator, course_no, 소요시간 low/high, has_geometry, path, source_id), `route_waypoints`, `route_segments`, `poi_places`, `waypoint_visits`, `daily_schedules.extra_route_ids`(하영올레 묶음) |
-| 진행률·체크인 | 하영올레: GPS를 경로에 맞춰 진행률 계산(순환 코스 대응), 경유지 반경 40m 체크인, 경로 이탈 50m 이상이 2분 넘게 이어지면 "위치 확인" 안내(정확도 30m보다 나쁘면 보류). 제주올레: 거리 기록과 종점 근접 확인. |
-| 일정 | 제주올레: 전날 종점에서 시작하는 코스를 이어 붙임. 하영올레: 반나절(1)·하루(1+2)·여유(3) 묶음 추천, 시간이 맞으면 하루에 묶음. |
-| AI 도구 | `list_routes(trail_type)`, `get_waypoints`, `get_next_waypoint`, `find_places_near`(poi_places + 출처·기준일), 기존 도구 유지. 두 길을 섞지 않도록 시스템 프롬프트에 명시. |
-| 알림 | 경유지 도착(앞길 보기), 경로 이탈, 종점 근처 + 기존(지연·일몰·공지·비). |
-| 앞길 브리핑 | `GET /v1/brief` (AI 도구 `get_trail_brief`와 같은 계산). 저장하는 것 없이 요청 때마다 만듭니다. ① **일몰 대비 도착**: 걷는 중이면 도착 예상과 일몰 여유(분), 출발 전이면 "늦어도 ○○시까지 출발"(해 지기 30분 전 마치기 기준). 여유 30분 미만 '빠듯함', 일몰 이후 도착은 '늦음'. ② **앞쪽 화장실·식당·쉼터**: 경로 좌표가 있는 하영올레는 앞 5km·길에서 300m 안쪽을 '앞 ○○m'로, 제주올레는 경로 좌표가 없어 내 주변 2km를 거리순으로(영업 여부는 실시간이 아니라 '확인 필요', 출처·기준일 표기). ③ **하루(24시간) 날씨**: 기상청 단기예보에서 비 시작 시각·강풍을 요약(키가 없으면 '확인 불가'). ④ **다음 경유지**(걷는 중이면 남은 거리, 출발 전이면 첫 경유지) ⑤ **공지**(코스의 활성 우회·통제 공지와 마지막 확인 시각). 화면은 1분마다 갱신하고, 오프라인에서 이전 응답이 나오면 몇 분 전 정보인지 표시합니다. |
-| UI | 하단 검정 알약 네비(홈·코스탐색·AI동행자·앞길브리핑, 흰 원 250ms 이동, URL 해시 동기화), 전체 화면 지도 홈(완료 구간 노랑 실선·남은 구간 흰 점선, 내 위치 펄스, 미니맵·다음 포인트·요약 카드), 청록 `#0F8F9B` 포인트·Pretendard. 메뉴(☰)에서 여행 일정·설정·동의·데이터 출처. |
+| `list_routes` | 코스 목록 조회. 제주올레(`jeju_olle`)와 하영올레(`hayoung_olle`)를 구분 |
+| `get_route` | 코스 상세(거리, 소요 시간, 시점·종점, 경유지, 출처·기준일) |
+| `get_waypoints` | 하영올레 경유지 목록 |
+| `get_next_waypoint` | 진행 중인 세션의 다음 경유지, 남은 거리, 내 속도에 맞춘 다음 휴식·오늘 목표 지점 |
+| `get_route_notices` | 코스의 공식 우회·통제·안전 공지와 마지막 확인 시각 |
+| `get_weather` | 기상청 단기예보 |
+| `find_places_near` | 주변 장소를 거리순으로 검색(`food`, `cafe`, `lodging`, `rest`, `toilet`, `wifi`). 출처·기준일 포함 |
+| `find_tour_spots` | 대표 관광지 목록(가까운 순) |
+| `get_tour_story` | 관광지 안내와 설화·유래. 한국관광공사 공식 안내문이 있으면 그 글을 사용 |
+| `estimate_arrival` | 남은 거리, 예상 도착 시각, 일몰 시각 |
+| `get_trip_plan` | 여행의 날짜별 승인된 일정과 승인 대기 초안 |
+| `propose_schedule_change` | 일정 변경 **제안** 생성(사용자 승인 필요) |
+| `get_trail_brief` | 앞길 브리핑 전체(일몰 대비 도착, 앞쪽 편의시설, 하루 날씨)를 한 번에 조회 |
 
-## 구성
+## 3. 탭별 기능
 
-| 영역 | 위치 |
+하단의 알약 모양 네비게이션에 4개 탭이 있고, 왼쪽 위 ☰ 메뉴에서 일정·설정을 엽니다.
+
+| 탭 | 기능 |
 |---|---|
-| Backend API (FastAPI, SQLAlchemy) | `backend/app` |
-| 데이터 파이프라인 | `backend/app/data_import` |
-| AI 오케스트레이터·도구 | `backend/app/agent` |
-| 규칙 기반 알림 | `backend/app/rules/engine.py` |
-| 모바일 웹(PWA, React + Vite + Leaflet) | `frontend/` |
+| **홈** | 전체 화면 코스 지도(완료 구간 노란 실선, 남은 구간 흰 점선, 내 위치 표시). 걷기 시작·일시정지·종료와 진행·남은 거리, 다음 경유지 카드. 걷는 동안 GPS를 기록해 진행률과 경유지 도착을 계산합니다. |
+| **코스탐색** | 제주올레·하영올레 코스를 둘러보고 고릅니다(거리·소요 시간·출처). 고른 코스는 홈 지도에서 봅니다. 걷는 중에는 코스를 바꿀 수 없습니다. |
+| **AI동행자** | 걷다가 궁금한 것을 묻는 채팅. 예시 질문 제공, 답변마다 출처 표시, 일정 변경 제안은 승인·나중에 버튼으로 처리. |
+| **앞길브리핑** | 일몰 전 도착 여부(일몰·도착 예상·남은 거리·늦어도 출발할 시각), 앞쪽 화장실·식당·쉼터, 하루 날씨(비·강풍), 코스 공지, 최근 알림. 1분마다 갱신합니다. |
 
-## 로컬 실행
+**☰ 메뉴**
+- **여행 일정**: 여행 만들기, 날짜별 코스 초안·편집·등록, AI 일정 제안 승인·거절, 여행 삭제
+- **설정·동의**: 언어(한국어·English), 하루 최대 거리·걷기 속도·출발·종료 시각·휴식 간격, 위치·AI 처리 동의, 알림 종류, 폰 알림(앱을 닫아도 수신)
+- **가상 위치(시연 모드)**: 제주 밖에서도 코스를 걷는 것처럼 시험(걷기·빨리 걷기·위치 슬라이더·길 벗어나기)
+- **처음부터 다시 체험하기**: 모든 기록과 설정을 지우고 첫 화면부터 다시 시작
+
+## 4. 실행 방법
 
 필요: Python 3.11+, Node 20+.
+
+**① 설치 (처음 한 번)**
 
 ```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt      # macOS/Linux: .venv/bin/pip
-.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 ```
 
-`backend/.env`는 git에 올라가지 않는 파일이라 직접 만듭니다(없어도 실행은 되고 키가 필요한 기능만 꺼집니다). 최소 예:
+**② 설정**: `backend/.env`를 만듭니다(git에 올라가지 않음). 없어도 실행되고, 키가 필요한 기능만 꺼집니다.
 
 ```ini
-APP_ENV=development
 ADMIN_TOKEN=<긴 임의 문자열>
-LLM_CHAIN=ollama,mock          # AI: Ollama(qwen3:4b) → 없으면 오프라인 mock
-KMA_APIHUB_KEY=                # 기상청 API허브 인증키: 단기예보 (먼저 시도)
-KMA_SERVICE_KEY=               # 공공데이터포털 일반 인증키: 기상청 단기예보 (대체)
-SBIZ_SERVICE_KEY=              # 같은 포털: 소상공인 상가정보 (sbiz-fetch)
-GEOCODER_CHAIN=local,stores
+LLM_CHAIN=gemini,openrouter,mock       # 사용할 AI 순서
+GEMINI_API_KEY=
+OPENROUTER_API_KEY=
+KMA_SERVICE_KEY=                       # 기상청 단기예보(공공데이터포털). 없으면 날씨는 '확인 불가'
 ```
 
-그 밖의 설정(Gemini·Groq 등 LLM, 브이월드·카카오, DB 주소 등)은 `backend/app/config.py`의 필드 이름을 대문자로 쓰면 됩니다.
+Ollama를 쓰려면 `LLM_CHAIN=ollama,mock`과 `OLLAMA_MODEL`을 지정합니다. 키를 어디서 받는지는 [5. 사용하는 API와 키](#5-사용하는-api와-키)를 보세요. 그 밖의 설정 이름은 `backend/app/config.py`에 있습니다.
+
+**③ 데이터 적재 (처음 한 번)**: 코스·경로·장소 데이터를 DB에 넣습니다. 원본은 `data/raw/`에 둡니다.
 
 ```bash
-cd frontend
-npm install
-npm run dev        # http://localhost:5173
+cd backend
+.venv/Scripts/python -m app.data_import all ../data/raw
 ```
 
-**한 번에 실행**: 위 설치(venv·`pip install`)를 한 번 해둔 뒤에는 저장소 루트에서 아래 한 줄이면 백엔드(8000)와 프런트(5173)가 같이 뜹니다. `frontend/node_modules`가 없으면 자동으로 `npm install`도 합니다. Ctrl+C로 둘 다 종료됩니다.
+**④ 실행**: 저장소 루트에서 한 줄이면 백엔드(8000)와 프런트(5173)가 같이 뜹니다.
 
 ```bash
-npm run dev
+npm run dev          # http://localhost:5173  (제주 밖에서는 http://localhost:5173/?demo=1)
 ```
 
-테스트: `cd backend && .venv/Scripts/python -m pytest -q`
-
-### 외부 공개(심사위원용)와 가상 위치
+**폰에서 써 보기 (임시 공개 주소)**: `cloudflared`가 필요합니다(`winget install --id Cloudflare.cloudflared -e`).
 
 ```bash
 npm run share
 ```
 
-프런트를 빌드한 뒤 백엔드(8000)·`vite preview`(5173)·Cloudflare 임시 터널을 함께 띄우고, 공개 https 주소를 출력합니다(`cloudflared` 필요: `winget install --id Cloudflare.cloudflared -e`). 계정·공유기 설정은 필요 없지만 **이 창을 닫거나 노트북이 잠들면 끊기고, 다시 실행하면 주소가 바뀝니다.**
+출력되는 `https://....trycloudflare.com` 주소를 폰에서 엽니다(제주 밖이면 뒤에 `/?demo=1`). 이 창을 닫거나 PC가 잠들면 끊기고, 다시 실행하면 주소가 바뀝니다. 브라우저마다 따로 사용자가 만들어집니다.
 
-- 심사위원에게는 `https://<주소>/?demo=1`을 줍니다. **가상 위치(시연 모드)**로 열려 제주 밖에서도 코스를 걷는 것처럼 시험할 수 있습니다(메뉴 ☰ → 가상 위치로도 켜고 끔). 홈의 패널에서 걷기/멈춤, 1×·5×·20× 빨리 걷기, 코스 위치 슬라이더, "길 벗어나기(80m)", 지도 탭으로 이동.
-- 처음 화면부터 다시 보여 주려면 메뉴 ☰ → **처음부터 다시 체험하기**. 서버의 여행·걷기 기록·설정과 이 브라우저의 온보딩·가이드 표시를 지우고 새로고침합니다(기기 ID와 가상 위치 설정은 유지).
-- 자동 걷기는 경로 좌표가 있는 코스(하영올레 1~3)에서만 됩니다. 제주올레는 좌표가 없어 지도 탭 이동만 됩니다.
-- 가상 위치가 보내는 GPS 점은 `source: "sim"`으로 표시되어 서버가 20배 빠른 이동까지 거리로 인정합니다(실제 기기 점은 14 km/h 초과 시 무시).
-- `npm run share`는 백엔드를 `PER_DEVICE_USERS=1`로 띄웁니다. **브라우저마다 따로 사용자**가 생겨(브라우저가 localStorage에 둔 임의 `X-Device-Id`로 구분) 심사위원끼리 여행·세션·진행률이 섞이지 않고, 처음 여는 사람은 온보딩부터 시작합니다. 로그인이 아니라 구분일 뿐이고, 같은 사람이라도 다른 브라우저·시크릿 창이면 새 사용자입니다. 내 노트북에서 쓰던 기존 데이터는 이 모드에서 보이지 않습니다(`npm run dev`로 돌아가면 그대로 있음).
-- 공개 주소는 누구나 열 수 있으니 심사위원에게만 주세요.
+**서버에 배포**: [docs/DEPLOY.md](docs/DEPLOY.md) (`docker-compose.prod.yml`)
 
-> DB 구조가 v1.2에서 바뀌었습니다. 예전 개발용 `jeju_trail_mate.db`가 있으면 지우고 다시 실행하세요(운영에서는 Alembic 마이그레이션 필요).
-
-### 데이터 적재
-
-원본 위치와 각 API 사용법은 [data/raw/README.md](data/raw/README.md)에 있습니다.
+**테스트**
 
 ```bash
-cd backend
-.venv/Scripts/python -m app.data_import all ../data/raw --license "공공누리 제1유형"
+cd backend && .venv/Scripts/python -m pytest -q
 ```
 
-| 단계 | 하는 일 |
+## 5. 사용하는 API와 키
+
+키가 없어도 앱은 실행됩니다. 해당 기능만 꺼지고 대체 동작으로 넘어갑니다. **앱을 제대로 써 보려면 AI 키 1개와 기상청 키**가 있으면 됩니다.
+
+### 앱이 실행 중에 호출하는 API
+
+| API | 환경 변수 | 용도 | 발급처 | 키가 없으면 |
+|---|---|---|---|---|
+| Google Gemini | `GEMINI_API_KEY` | AI동행자 대화 | [Google AI Studio](https://aistudio.google.com/apikey) | 체인의 다음 모델 → mock |
+| OpenRouter | `OPENROUTER_API_KEY` | AI동행자 대화(Gemini 한도·장애 시 대체) | [openrouter.ai/keys](https://openrouter.ai/keys) | 체인의 다음 모델 → mock |
+| Groq / Anthropic Claude (선택) | `GROQ_API_KEY` / `ANTHROPIC_API_KEY` | AI동행자 대화 | [console.groq.com](https://console.groq.com/keys) / [console.anthropic.com](https://console.anthropic.com) | 체인에서 건너뜀 |
+| Ollama (선택) | 키 없음 (`OLLAMA_MODEL`) | 서버에서 직접 돌리는 로컬 모델 | [ollama.com](https://ollama.com) | — |
+| 기상청 단기예보 (API허브) | `KMA_APIHUB_KEY` | 앞길브리핑·AI 날씨 답변·비 알림 (먼저 시도) | [apihub.kma.go.kr](https://apihub.kma.go.kr/) 에서 '단기예보 조회서비스' 신청 | 아래 공공데이터포털 키로 대체 |
+| 기상청 단기예보 (공공데이터포털) | `KMA_SERVICE_KEY` | 위와 같음 (API허브 실패 시 대체) | [data.go.kr](https://www.data.go.kr/) 에서 '기상청_단기예보 조회서비스' 활용신청 | 둘 다 없으면 날씨 '확인 불가', 비 알림 꺼짐 |
+| 한국관광공사 TourAPI 국문 관광정보 | 위의 공공데이터포털 키를 그대로 사용 (`SBIZ_SERVICE_KEY`가 있으면 그것) | "여기 이야기 해줘"에서 현재 위치 근처 관광지의 공식 안내문 조회 | [공공데이터포털 15101578](https://www.data.go.kr/data/15101578/openapi.do) 활용신청 | 내장된 대표 관광지 18곳만 안내 |
+| OpenStreetMap 지도 타일 | 키 없음 | 지도 배경 (개발용 타일) | — | — |
+
+공공데이터포털은 키 하나로 여러 API를 쓰지만, **API마다 활용신청을 따로** 해야 합니다.
+
+### 데이터 적재 때만 호출하는 API
+
+`python -m app.data_import ...` 단계에서만 쓰이고, 앱이 실행 중에는 호출하지 않습니다.
+
+| API | 환경 변수 | 명령 | 용도 |
+|---|---|---|---|
+| 서귀포시 착한가격업소 OpenAPI | 키 없음 | `goodprice` (`all`에 포함) | 음식점·숙박 후보 |
+| 소상공인 상가(상권)정보 | `SBIZ_SERVICE_KEY` (없으면 `KMA_SERVICE_KEY`) | `sbiz-fetch` | 착한가격업소 같은 주소만 있는 장소에 좌표 보강 |
+| 한국관광공사 TourAPI | 공공데이터포털 키 | `tour-fetch` | 대표 관광지 18곳의 공식 개요·좌표 |
+| 전국공중화장실표준데이터 (공공데이터포털 15012892) | 공공데이터포털 키 | `toilets-fetch` | 공중화장실. 활용신청 전에는 OSM 화장실 파일을 대신 사용 |
+| OpenStreetMap Overpass | 키 없음 | `olle-fetch` | 제주올레 경로(route relation)와 보행로 |
+| 제주올레 공식 홈페이지 | 키 없음 | `olle-fetch` | 코스 시작·종점 좌표 (사이트 콘텐츠 이용 허락 확인 필요) |
+| Kakao 로컬 API (선택) | `KAKAO_REST_API_KEY` | `geocode` | 주소·장소명 → 좌표. 약관상 결과 저장은 불가라 제안으로만 표시 |
+| 브이월드 Geocoder (선택) | `VWORLD_API_KEY`, `VWORLD_DOMAIN` | `geocode` | 위와 같음 |
+
+### 파일로 내려받아 `data/raw/`에 두는 데이터
+
+API가 아니라 사이트에서 직접 받습니다. 폴더별 설명은 [data/raw/README.md](data/raw/README.md)에 있습니다.
+
+| 데이터 | 받는 곳 |
 |---|---|
-| `olle` | 올레코스현황 CSV(코스별·코스명·거리·소요시간정보·시종점정보·데이터기준일자) → 29개 코스, (A)/(B) 분리, 목록에서 빠진 옛 코스 정리 |
-| `hayoung` | 코스별 SHP(조각난 다중 선)를 이어 붙여 걷는 순서의 순환 경로로 복원: 중복 선 제거, 새섬 같은 왕복 구간은 두 번, 공시 거리와 비교 |
-| `poi` | 공공와이파이 관광지 AP CSV(주소만) |
-| `goodprice` | 서귀포시 착한가격업소 OpenAPI(키 불필요) |
-| `locate-waypoints` | 좌표가 있는 장소 이름과 경유지 이름을 맞춰, 경로 150m 안이면 경로 위로 붙여 경유지 체크인을 켬. 진행 방향도 검증 |
+| 하영올레 전체 코스 SHP, 공공와이파이 관광지 AP | [제주데이터허브](https://www.jejudatahub.net/) |
+| 올레코스현황 CSV | [공공데이터포털 15043496](https://www.data.go.kr/data/15043496/fileData.do) |
+| (선택) 도로명주소 위치정보 요약DB(제주) | [juso.go.kr](http://www.juso.go.kr/externalLink/goUrl.do?menuId=DT03) — 심사 필요 |
 
-### 키가 없을 때
+### 직접 만드는 키
 
-- LLM 제공사는 `LLM_CHAIN`(예: `ollama,gemini,mock`)으로 순서를 정하고, 한도·장애 시 다음으로 넘어갑니다. 키가 없는 항목은 건너뛰고, API 키는 쉼표로 여러 개 넣으면 돌려 씁니다. 로컬 모델(Ollama)은 `OLLAMA_MODEL`, 센터 PC용은 `docker-compose.yml`. 설정 이름은 `backend/app/config.py`.
-- 아무것도 없으면(`ANTHROPIC_API_KEY`·`LLM_CHAIN` 없음) → 오프라인 모드(키워드로 도구 조회 결과만 답함).
-- 날씨는 `KMA_APIHUB_KEY`(기상청 API허브) → `KMA_SERVICE_KEY`(공공데이터포털) 순서로 시도하고, 하나가 실패하면 다음으로 넘어갑니다. 둘 다 없거나 모두 실패 → "예보 확인 필요", 비 알림 꺼짐.
-- 주소 → 좌표 변환기(`GEOCODER_CHAIN`: `local`=위치정보 요약DB, `stores`=상가정보·인허가 업소 목록과 상호·주소 매칭, `vworld`, `kakao`)가 하나도 없으면 착한가격업소 등 주소만 있는 장소는 "주소 기준 목록"으로만 안내. 브이월드·카카오(기본 설정)는 약관상 결과 저장이 안 되어 보고서의 "제안"으로만 나오고 DB에는 쓰지 않습니다. 확인: `python -m app.data_import geocode --address "서귀포시 중앙로 62번길 5"`.
-
-## 알려진 제약
-
-- 시드 데이터: 제주올레 27코스는 UI 프로토타입 표(올레코스현황 2020-01-14 기준)에서 옮긴 값이고, 하영올레는 경유지 이름·순서만 있습니다. 원본을 적재하면 교체됩니다. 경유지 코드 규칙(S/F/순번)은 추정이라 실제 SHP로 확인해야 합니다.
-- 지도는 개발용 OpenStreetMap 타일입니다. 명세의 "입체 지도"(DEM/지도 SDK 3D 또는 일러스트)는 결정이 필요합니다.
-- 체크인 반경 40m, 이탈 50m/2분, 완주 80%는 초안 값이며 하영올레 현장 테스트로 조정합니다(`backend/app/services/tracking_service.py`).
-- 브라우저 PWA는 화면이 꺼지면 GPS가 멈출 수 있습니다. 앱을 닫았을 때의 알림은 Web Push(`pywebpush`와 VAPID 키 필요, 설정 → 폰 알림)로 보내며, 없으면 앱이 열려 있을 때만 옵니다.
+- **폰 알림(Web Push)**: 외부 API가 아니라 서버가 쓰는 키 쌍을 직접 만듭니다. `python -m app.push keygen`으로 만들어 `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`(`mailto:내이메일`)를 `.env`에 넣습니다. 없으면 앱이 열려 있을 때만 알림이 옵니다.
+- **관리자 토큰**: `ADMIN_TOKEN`은 공지 관리용 `/v1/admin/*` 접근에 쓰는 임의의 긴 문자열입니다.
