@@ -24,7 +24,7 @@ def _tc(name, args, id="c1"):
 
 
 def _llm(handler, api_key=None, **kw):
-    return OpenAICompatLLM("t", "http://localhost:11434/v1", "qwen3:4b", api_key,
+    return OpenAICompatLLM("t", "http://localhost:8000/v1", "m", api_key,
                            client=httpx.Client(transport=httpx.MockTransport(handler)), **kw)
 
 
@@ -144,13 +144,13 @@ def test_fallback_chain_moves_on_and_reports_external_conservatively():
     with pytest.raises(LLMUnavailable):
         FallbackLLM([_Down(), _Down()]).run_tools("s", "u", TOOLS, lambda n, a: None)  # nobody left -> the last error surfaces
     cloud = OpenAICompatLLM("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "m", "k")
-    assert FallbackLLM([OpenAICompatLLM("ollama", "http://localhost:11434/v1", "m"), cloud]).external is True
-    assert FallbackLLM([OpenAICompatLLM("ollama", "http://localhost:11434/v1", "m"), MockLLM()]).external is False
+    assert FallbackLLM([OpenAICompatLLM("local", "http://localhost:8000/v1", "m"), cloud]).external is True
+    assert FallbackLLM([OpenAICompatLLM("local", "http://localhost:8000/v1", "m"), MockLLM()]).external is False
 
 
 @pytest.mark.parametrize("url,local", [
-    ("http://localhost:11434/v1", True), ("http://127.0.0.1:8000/v1", True), ("http://ollama:11434/v1", True),
-    ("http://host.docker.internal:11434/v1", True), ("http://192.168.0.5:8000/v1", True),
+    ("http://localhost:8000/v1", True), ("http://127.0.0.1:8000/v1", True), ("http://llm-server:8000/v1", True),
+    ("http://host.docker.internal:8000/v1", True), ("http://192.168.0.5:8000/v1", True),
     ("https://api.groq.com/openai/v1", False), ("https://generativelanguage.googleapis.com/v1beta/openai", False),
 ])
 def test_is_local_url(url, local):
@@ -162,13 +162,13 @@ def test_chain_is_built_from_settings(monkeypatch):
         monkeypatch.setattr(llm_mod, "get_settings", lambda: Settings(_env_file=None, **kw))
         return llm_mod.build_llm()
 
-    chain = build(llm_chain="gemini, ollama ,nope,mock", gemini_api_key="k1,k2")
-    assert isinstance(chain, FallbackLLM) and chain.name == "gemini>ollama>mock"  # unknown entry ignored
+    chain = build(llm_chain="gemini, groq ,nope,mock", gemini_api_key="k1,k2", groq_api_key="g")
+    assert isinstance(chain, FallbackLLM) and chain.name == "gemini>groq>mock"  # unknown entry ignored
     assert build(llm_chain="gemini,groq").name == "mock"  # nothing configured -> offline mock, never a crash
-    assert build(llm_chain="ollama").name == "ollama" and build(llm_chain="ollama").external is False
+    assert build(llm_chain="ollama").name == "mock"  # Ollama support was removed: treated as an unknown entry
     assert build(llm_chain="", llm_provider="mock").name == "mock"  # legacy switch still works
     custom = build(llm_chain="openai", openai_base_url="http://localhost:8000/v1", openai_model="m")
-    assert custom.name == "openai" and custom.model == "m"
+    assert custom.name == "openai" and custom.model == "m" and custom.external is False
 
 
 def test_dish_names_containing_bi_are_not_taken_for_weather():

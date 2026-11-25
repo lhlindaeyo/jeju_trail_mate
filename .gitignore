@@ -38,3 +38,6 @@ data/raw/tour_api/*
 
 # Server deployment: SQLite file kept next to docker-compose.prod.yml
 server_data/
+
+# Packaged server bundle
+*.zip

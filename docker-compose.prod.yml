@@ -1,5 +1,4 @@
-# 서버 배포용(AI는 Gemini 같은 클라우드 API를 쓰므로 Ollama·GPU가 필요 없습니다).
-# 센터 PC용 로컬 LLM 구성은 docker-compose.yml 입니다.
+# 서버 배포용(AI는 Gemini 같은 클라우드 API를 쓰므로 GPU가 필요 없습니다).
 #
 #   web      Caddy: 프런트(dist) 서빙 + /v1·/health 를 backend 로 전달 + (도메인이 있으면) HTTPS 자동
 #   backend  FastAPI (SQLite 파일은 ./server_data 에 보관)

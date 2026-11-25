@@ -25,11 +25,10 @@
 
 | 이름 | 실행 위치 | 특징 |
 |---|---|---|
-| `ollama` | 백엔드 서버(같은 PC·사설망) | 대화가 서버 밖으로 나가지 않고 비용 없음. 기본 모델 `qwen3:4b` |
 | `gemini`, `groq`, `openrouter`, `anthropic`, `openai`(OpenAI 호환 주소) | 외부 | 대화가 외부 서버로 전송됨 |
 | `mock` | 백엔드 서버 | AI 없이 키워드로 도구를 호출해 결과만 답함. 다른 모델이 모두 안 될 때, 또는 설정된 모델이 없을 때 사용 |
 
-- **동의 규칙**: 체인에 외부 제공사가 하나라도 있으면, 사용자가 설정에서 'AI 처리 동의'를 켠 경우에만 AI 대화를 실행합니다. 꺼져 있으면 Ollama를 포함해 어떤 모델도 호출하지 않고 안내만 표시합니다. 동의 없이 서버 안에서만 처리하려면 `LLM_CHAIN=ollama,mock`처럼 외부 제공사를 빼세요.
+- **동의 규칙**: 체인에 외부 제공사가 하나라도 있으면, 사용자가 설정에서 'AI 처리 동의'를 켠 경우에만 AI 대화를 실행합니다. 꺼져 있으면 어떤 모델도 호출하지 않고 안내만 표시합니다. 동의 없이 쓰려면 `LLM_CHAIN=mock`처럼 외부 제공사를 빼세요(키워드 답변만 나옵니다).
 - **도구 호출 보완**: OpenAI 호환 모델이 도구를 부르지 않고 답하려 하면, 질문의 키워드를 보고 해당 도구를 대신 호출한 뒤 결과를 모델이 문장으로 정리하게 합니다. 키워드는 글자 포함 여부로 확인하므로 "비" 한 글자가 아니라 "비가", "비 올", "우산"처럼 여러 글자 표현만 등록해, "비빔밥"이 날씨 질문으로 처리되지 않습니다.
 - **승인 구조**: 일정 변경은 에이전트가 직접 하지 않고 '제안'만 만듭니다. 사용자가 화면에서 승인해야 반영됩니다.
 - **응급**: "살려줘", "119", "다쳤어" 같은 문구가 있으면 LLM을 거치지 않고 119·112 안내를 바로 돌려줍니다.
@@ -94,7 +93,7 @@ OPENROUTER_API_KEY=
 KMA_SERVICE_KEY=                       # 기상청 단기예보(공공데이터포털). 없으면 날씨는 '확인 불가'
 ```
 
-Ollama를 쓰려면 `LLM_CHAIN=ollama,mock`과 `OLLAMA_MODEL`을 지정합니다. 키를 어디서 받는지는 [5. 사용하는 API와 키](#5-사용하는-api와-키)를 보세요. 그 밖의 설정 이름은 `backend/app/config.py`에 있습니다.
+키를 어디서 받는지는 [5. 사용하는 API와 키](#5-사용하는-api와-키)를 보세요. 그 밖의 설정 이름은 `backend/app/config.py`에 있습니다.
 
 **③ 데이터 적재 (처음 한 번)**: 코스·경로·장소 데이터를 DB에 넣습니다. 원본은 `data/raw/`에 둡니다.
 
@@ -136,7 +135,6 @@ cd backend && .venv/Scripts/python -m pytest -q
 | Google Gemini | `GEMINI_API_KEY` | AI동행자 대화 | [Google AI Studio](https://aistudio.google.com/apikey) | 체인의 다음 모델 → mock |
 | OpenRouter | `OPENROUTER_API_KEY` | AI동행자 대화(Gemini 한도·장애 시 대체) | [openrouter.ai/keys](https://openrouter.ai/keys) | 체인의 다음 모델 → mock |
 | Groq / Anthropic Claude (선택) | `GROQ_API_KEY` / `ANTHROPIC_API_KEY` | AI동행자 대화 | [console.groq.com](https://console.groq.com/keys) / [console.anthropic.com](https://console.anthropic.com) | 체인에서 건너뜀 |
-| Ollama (선택) | 키 없음 (`OLLAMA_MODEL`) | 서버에서 직접 돌리는 로컬 모델 | [ollama.com](https://ollama.com) | — |
 | 기상청 단기예보 (API허브) | `KMA_APIHUB_KEY` | 앞길브리핑·AI 날씨 답변·비 알림 (먼저 시도) | [apihub.kma.go.kr](https://apihub.kma.go.kr/) 에서 '단기예보 조회서비스' 신청 | 아래 공공데이터포털 키로 대체 |
 | 기상청 단기예보 (공공데이터포털) | `KMA_SERVICE_KEY` | 위와 같음 (API허브 실패 시 대체) | [data.go.kr](https://www.data.go.kr/) 에서 '기상청_단기예보 조회서비스' 활용신청 | 둘 다 없으면 날씨 '확인 불가', 비 알림 꺼짐 |
 | 한국관광공사 TourAPI 국문 관광정보 | 위의 공공데이터포털 키를 그대로 사용 (`SBIZ_SERVICE_KEY`가 있으면 그것) | "여기 이야기 해줘"에서 현재 위치 근처 관광지의 공식 안내문 조회 | [공공데이터포털 15101578](https://www.data.go.kr/data/15101578/openapi.do) 활용신청 | 내장된 대표 관광지 18곳만 안내 |

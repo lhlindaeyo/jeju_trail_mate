@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     per_device_users: bool = False
 
     # AI. LLM_CHAIN (comma-separated, tried in order) wins over LLM_PROVIDER when set.
-    # Names: ollama | gemini | groq | openrouter | openai (any OpenAI-compatible URL) | anthropic | mock
+    # Names: gemini | groq | openrouter | openai (any OpenAI-compatible URL) | anthropic | mock
     anthropic_api_key: str | None = None
     llm_model: str = "claude-opus-5-5"  # Anthropic model
     llm_effort: str = "medium"
@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 120.0  # CPU-only local models can be slow
     llm_max_turns: int = 4  # tool-loop turns for OpenAI-compatible providers
     # API keys may be comma-separated: they are rotated on 401/403/429.
-    ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_model: str = "qwen3:4b"
     gemini_api_key: str | None = None
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     gemini_model: str = "gemini-2.5-flash"

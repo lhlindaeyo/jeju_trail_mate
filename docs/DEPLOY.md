@@ -1,6 +1,6 @@
 # 서버 배포 (폰에서 쓰기)
 
-AI는 Gemini·OpenRouter 같은 클라우드 API를 쓰므로 서버에 GPU도 Ollama도 필요 없습니다. 작은 VPS(RAM 1~2GB)면 됩니다.
+AI는 Gemini·OpenRouter 같은 클라우드 API를 쓰므로 서버에 GPU가 필요 없습니다. 작은 VPS(RAM 1~2GB)면 됩니다.
 
 ```
 폰 ──https──> web(Caddy) ─┬─ 정적 파일(프런트 dist)
@@ -14,7 +14,7 @@ AI는 Gemini·OpenRouter 같은 클라우드 API를 쓰므로 서버에 GPU도 O
 
 ## 0. 설치할 것
 
-서버에는 **Docker 하나만** 설치하면 됩니다. Python, Node, Caddy, Ollama는 컨테이너 안에서 돌아가므로 따로 설치하지 않습니다.
+서버에는 **Docker 하나만** 설치하면 됩니다. Python, Node, Caddy는 컨테이너 안에서 돌아가므로 따로 설치하지 않습니다.
 
 | 항목 | 내용 |
 |---|---|

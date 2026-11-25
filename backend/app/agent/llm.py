@@ -257,7 +257,7 @@ def _summarize(tool: str, out: Any) -> str:
     return json.dumps(out, ensure_ascii=False, default=str)[:1500]
 
 
-# --- OpenAI-compatible providers (Ollama, Gemini, Groq, OpenRouter, vLLM, llama.cpp, LM Studio ...) ---------
+# --- OpenAI-compatible providers (Gemini, Groq, OpenRouter, vLLM, llama.cpp, LM Studio ...) ---------
 def is_local_url(url: str) -> bool:
     """True when the endpoint is on this machine / LAN / a docker service name (data does not leave)."""
     host = (urlparse(url).hostname or "").lower()
@@ -440,8 +440,6 @@ def _make_provider(name: str) -> LLM | None:
         return MockLLM()
     if name == "anthropic":
         return AnthropicLLM() if s.anthropic_api_key else None
-    if name == "ollama":
-        return OpenAICompatLLM("ollama", s.ollama_base_url, s.ollama_model, None, **kw)
     if name == "openai":
         return OpenAICompatLLM("openai", s.openai_base_url, s.openai_model, s.openai_api_key, **kw) if s.openai_base_url and s.openai_model else None
     if name in ("gemini", "groq", "openrouter"):
