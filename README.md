@@ -4,6 +4,25 @@
 
 > 사단법인 제주올레·서귀포시가 운영·보증하는 서비스가 아니며, 구조·구급 서비스도 아닙니다.
 
+## 실제 개발된 화면
+
+목업이 아니라 직접 개발해 실행한 앱(모바일 PWA)을 캡처한 화면입니다. 제주 밖에서 찍은 화면은 '가상 위치(시연 모드)'로 코스를 걷는 상황을 재현한 것입니다.
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/screenshots/01-onboarding.png" alt="온보딩"><br><sub><b>온보딩</b><br>계획·걷기·앞길 브리핑 소개와 안전 안내</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/02-home.png" alt="홈"><br><sub><b>홈</b><br>코스 지도, 남은 거리, 걷기 시작</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/03-home-demo.png" alt="가상 위치 시연 모드"><br><sub><b>가상 위치(시연 모드)</b><br>슬라이더·배속으로 코스를 걷는 상황 재현</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/04-explore.png" alt="코스탐색"><br><sub><b>코스탐색</b><br>제주올레·하영올레 코스와 경유지</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/05-companion.png" alt="AI동행자"><br><sub><b>AI동행자</b><br>꼬마하르방 제돌이에게 묻는 채팅</sub></td>
+    <td align="center"><img src="docs/screenshots/06-briefing.png" alt="앞길브리핑"><br><sub><b>앞길브리핑</b><br>일몰 대비 도착 시각과 하루 날씨</sub></td>
+    <td align="center"><img src="docs/screenshots/07-settings.png" alt="설정·동의"><br><sub><b>설정·동의</b><br>걷기 스타일, AI 처리·위치 기록 동의</sub></td>
+    <td></td>
+  </tr>
+</table>
+
 ## 1. 에이전트 아키텍처
 
 ```
